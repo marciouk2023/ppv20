@@ -307,11 +307,36 @@ export async function GET(request: Request) {
         // Send to each contact
         for (const contact of birthdayContacts) {
           totalMessagesAttempted++
+
+          // Generate a unique ID for this birthday message - MUST be consistent for deduplication
+          const messageId = generateMessageId("birthday", userEmail, contact.id)
+
+          // Check if we already sent a message to this contact today
+          const sentMessagesRef = collection(db, "sent_messages")
+          const q = query(
+            sentMessagesRef,
+            where("messageId", "==", messageId),
+            where("timestamp", ">=", Timestamp.fromDate(new Date(new Date().toISOString().split("T")[0]))),
+            where("status", "in", ["sent", "sending"]),
+          )
+
+          const existingMessages = await getDocs(q)
+          if (!existingMessages.empty) {
+            console.log(
+              `[CRON] ⏭️ Message for ${contact.nome} (${userEmail}) already sent today. Skipping. ID: ${messageId}`,
+            )
+            results.push({
+              user: userEmail,
+              contact: contact.nome,
+              status: "skipped_duplicate",
+              messageId: messageId,
+            })
+            continue // Skip to next contact
+          }
+
+          // Select only ONE random message template
           const randomIndex = Math.floor(Math.random() * birthdayMessages.length)
           const messageTemplate = birthdayMessages[randomIndex]
-
-          // Generate a unique ID for this birthday message
-          const messageId = generateMessageId("birthday", userEmail, contact.id)
 
           // Call the sendMessage function with the unique ID
           const sendResult = await sendMessage({

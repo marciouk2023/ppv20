@@ -61,16 +61,20 @@ export async function sendMessage(options: SendMessageOptions): Promise<SendMess
   try {
     // ENHANCED: First check if this message has already been sent today (outside transaction for efficiency)
     const sentMessagesRef = collection(db, "sent_messages")
+    const todayStart = new Date(today)
+    todayStart.setHours(0, 0, 0, 0)
     const q = query(
       sentMessagesRef,
       where("messageId", "==", messageId),
-      where("timestamp", ">=", Timestamp.fromDate(new Date(today))),
+      where("timestamp", ">=", Timestamp.fromDate(todayStart)),
       where("status", "in", ["sent", "sending"]),
     )
 
     const existingMessages = await getDocs(q)
     if (!existingMessages.empty) {
-      console.log(`[sendMessage_LOG] Message already sent today. MessageId: ${messageId}`)
+      console.log(
+        `[sendMessage_LOG] Message already sent today. MessageId: ${messageId}, Count: ${existingMessages.size}`,
+      )
       return {
         success: true,
         message: "Mensagem já enviada hoje para este contato (verificação prévia)",
