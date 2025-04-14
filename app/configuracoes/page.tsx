@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Clock, MessageSquare, Info, AlertTriangle, RefreshCw, Smartphone, Loader2, Check } from 'lucide-react'
+import { Clock, MessageSquare, Info, AlertTriangle, RefreshCw, Smartphone, Loader2, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -12,8 +12,8 @@ import { Badge } from "@/components/ui/badge"
 import { Sidebar } from "@/components/sidebar"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/contexts/auth-context"
-import { saveUserSession, updateSessionStatus, checkUserSession } from "@/lib/session-manager"
-import { collection, getDocs, doc, getDoc, setDoc, query, where, orderBy } from "firebase/firestore"
+import { saveUserSession, updateSessionStatus, checkUserSession, getSessionStatusURL } from "@/lib/session-manager"
+import { doc, getDoc, setDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase-config"
 import { differenceInSeconds } from "date-fns"
 
@@ -49,11 +49,7 @@ function ConnectionStatusBadge({
           // If the user has a session, check the status of that specific session
           try {
             // Use VERCEL_URL if available, otherwise fallback
-            const apiUrl = process.env.NEXT_PUBLIC_VERCEL_URL
-                           ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-                           : 'https://api.parabenspravoce.com'; // Fallback or local URL
-
-            const sessionEndpoint = `<span class="math-inline">\{apiUrl\}/api/sessions/</span>{userSession.sessionName}/status`
+            const sessionEndpoint = getSessionStatusURL(userSession.sessionName)
             // console.log(`[StatusBadge] Checking endpoint: ${sessionEndpoint}`); // Debug URL
             const response = await fetch(sessionEndpoint, {
               cache: "no-store", // Ensure fresh data
@@ -176,7 +172,7 @@ export default function ConfiguracoesPage() {
     }
     try {
       const userSettingsRef = doc(db, "user_settings", user.email)
-      await setDoc( userSettingsRef, { sendTime: time, updatedAt: new Date() }, { merge: true } )
+      await setDoc(userSettingsRef, { sendTime: time, updatedAt: new Date() }, { merge: true })
       console.log(`Horário ${time} salvo com sucesso para ${user.email}`)
       toast({ title: "Horário Salvo", description: `O horário de envio foi definido para ${time}.` })
     } catch (error) {
@@ -210,7 +206,7 @@ export default function ConfiguracoesPage() {
   // Check and update connection status
   const checkAndUpdateSessionStatus = async () => {
     if (!user?.email) {
-      if (connectionStatus !== "disconnected") setConnectionStatus("disconnected");
+      if (connectionStatus !== "disconnected") setConnectionStatus("disconnected")
       setUserSessionInfo({ hasSession: false, sessionName: null, status: null })
       return
     }
@@ -220,81 +216,92 @@ export default function ConfiguracoesPage() {
       setUserSessionInfo(sessionInfo)
 
       if (sessionInfo.hasSession && sessionInfo.sessionName) {
-        setSessionName(sessionInfo.sessionName); // Keep track of the session name
+        setSessionName(sessionInfo.sessionName) // Keep track of the session name
         // Check actual status via API only if Firestore status looks active or unknown
-        if (sessionInfo.status === "WORKING" || sessionInfo.status === "CONNECTED" || sessionInfo.status === "AUTHENTICATED" || !sessionInfo.status) {
-           try {
-             const apiUrl = process.env.NEXT_PUBLIC_VERCEL_URL
-                           ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-                           : 'https://api.parabenspravoce.com'; // Fallback or local URL
-             const statusEndpoint = `<span class="math-inline">\{apiUrl\}/api/sessions/</span>{sessionInfo.sessionName}/status`;
-             const response = await fetch(statusEndpoint, { cache: "no-store" });
+        if (
+          sessionInfo.status === "WORKING" ||
+          sessionInfo.status === "CONNECTED" ||
+          sessionInfo.status === "AUTHENTICATED" ||
+          !sessionInfo.status
+        ) {
+          try {
+            const apiUrl = process.env.NEXT_PUBLIC_VERCEL_URL
+              ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
+              : "https://api.parabenspravoce.com" // Fallback or local URL
+            const statusEndpoint = `${apiUrl}/api/sessions/${sessionInfo.sessionName}/status`
+            const response = await fetch(statusEndpoint, { cache: "no-store" })
 
-             if (response.ok) {
-                const data = await response.json();
-                const currentState = data.state || data.status;
-                if (currentState === "WORKING" || currentState === "CONNECTED" || currentState === "AUTHENTICATED" || data.connected === true || data.authenticated === true) {
-                   if (connectionStatus !== "connected") {
-                      // console.log(`[SessionCheck] Updating status to connected for session ${sessionInfo.sessionName}`);
-                      setConnectionStatus("connected");
-                      setLastConnection(new Date().toLocaleString());
-                      setQrCode(null);
-                      setErrorMessage(null);
-                   }
-                } else {
-                   if (connectionStatus === "connected") {
-                      // console.log(`[SessionCheck] API shows session <span class="math-inline">\{sessionInfo\.sessionName\} not connected \(</span>{currentState}). Updating status.`);
-                      setConnectionStatus("disconnected");
-                   } else if (currentState === "SCAN_QR_CODE" && connectionStatus === "disconnected") {
-                      setConnectionStatus("connecting"); // If API says scan QR, reflect it
-                   }
+            if (response.ok) {
+              const data = await response.json()
+              const currentState = data.state || data.status
+              if (
+                currentState === "WORKING" ||
+                currentState === "CONNECTED" ||
+                currentState === "AUTHENTICATED" ||
+                data.connected === true ||
+                data.authenticated === true
+              ) {
+                if (connectionStatus !== "connected") {
+                  // console.log(`[SessionCheck] Updating status to connected for session ${sessionInfo.sessionName}`);
+                  setConnectionStatus("connected")
+                  setLastConnection(new Date().toLocaleString())
+                  setQrCode(null)
+                  setErrorMessage(null)
                 }
-             } else {
+              } else {
                 if (connectionStatus === "connected") {
-                   // console.warn(`[SessionCheck] API error (${response.status}) checking session ${sessionInfo.sessionName}. Assuming disconnected.`);
-                   setConnectionStatus("disconnected");
+                  // console.log(`[SessionCheck] API shows session ${sessionInfo.sessionName} not connected (${currentState}). Updating status.`);
+                  setConnectionStatus("disconnected")
+                } else if (currentState === "SCAN_QR_CODE" && connectionStatus === "disconnected") {
+                  setConnectionStatus("connecting") // If API says scan QR, reflect it
                 }
-             }
-           } catch (apiError) {
-             console.error(`[SessionCheck] Error calling API for session ${sessionInfo.sessionName}:`, apiError);
-             if (connectionStatus === "connected") {
-                setConnectionStatus("disconnected");
-             }
-           }
+              }
+            } else {
+              if (connectionStatus === "connected") {
+                // console.warn(`[SessionCheck] API error (${response.status}) checking session ${sessionInfo.sessionName}. Assuming disconnected.`);
+                setConnectionStatus("disconnected")
+              }
+            }
+          } catch (apiError) {
+            console.error(`[SessionCheck] Error calling API for session ${sessionInfo.sessionName}:`, apiError)
+            if (connectionStatus === "connected") {
+              setConnectionStatus("disconnected")
+            }
+          }
         } else {
-             // Firestore status is explicitly not connected (e.g., 'disconnected', 'error')
-             if (connectionStatus !== "disconnected") {
-                // console.log(`[SessionCheck] Firestore status is ${sessionInfo.status}. Updating status to disconnected.`);
-                setConnectionStatus("disconnected");
-             }
+          // Firestore status is explicitly not connected (e.g., 'disconnected', 'error')
+          if (connectionStatus !== "disconnected") {
+            // console.log(`[SessionCheck] Firestore status is ${sessionInfo.status}. Updating status to disconnected.`);
+            setConnectionStatus("disconnected")
+          }
         }
       } else {
         // Firestore says no session
         if (connectionStatus !== "disconnected") {
           // console.log("[SessionCheck] Firestore indicates no active session. Updating status to disconnected.");
-          setConnectionStatus("disconnected");
+          setConnectionStatus("disconnected")
         }
-        setSessionName(null); // Clear session name if no session exists
+        setSessionName(null) // Clear session name if no session exists
       }
     } catch (error) {
-      console.error("[SessionCheck] Error checking user session:", error);
+      console.error("[SessionCheck] Error checking user session:", error)
       if (connectionStatus !== "disconnected") {
-        setConnectionStatus("disconnected");
+        setConnectionStatus("disconnected")
       }
-      setUserSessionInfo({ hasSession: false, sessionName: null, status: null });
+      setUserSessionInfo({ hasSession: false, sessionName: null, status: null })
     }
   }
 
   // Run session check periodically and on user change
   useEffect(() => {
     if (!user?.email) {
-       setConnectionStatus("disconnected"); // Force disconnect if user logs out
-       return;
+      setConnectionStatus("disconnected") // Force disconnect if user logs out
+      return
     }
-    checkAndUpdateSessionStatus(); // Initial check
-    const intervalId = setInterval(checkAndUpdateSessionStatus, 20000); // Check every 20 seconds
-    return () => clearInterval(intervalId); // Cleanup interval
-  }, [user]); // Re-run when user changes
+    checkAndUpdateSessionStatus() // Initial check
+    const intervalId = setInterval(checkAndUpdateSessionStatus, 20000) // Check every 20 seconds
+    return () => clearInterval(intervalId) // Cleanup interval
+  }, [user]) // Re-run when user changes
 
   // Cleanup status check interval when component unmounts
   useEffect(() => {
@@ -323,7 +330,7 @@ export default function ConfiguracoesPage() {
 
     let tempSessionName = sessionName // Use existing if available, else generate
     if (!tempSessionName) {
-         tempSessionName = generateLocalUniqueSessionName();
+      tempSessionName = generateLocalUniqueSessionName()
     }
 
     // Stop any existing status check
@@ -340,46 +347,52 @@ export default function ConfiguracoesPage() {
 
     try {
       const apiUrl = process.env.NEXT_PUBLIC_VERCEL_URL
-                     ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-                     : 'https://api.parabenspravoce.com'; // Fallback or local URL
+        ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
+        : "https://api.parabenspravoce.com" // Fallback or local URL
 
       // Call API to start session (might return QR directly or require polling)
       const startSessionResponse = await fetch(`${apiUrl}/api/whatsapp/generate-qr`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sessionName: tempSessionName, userEmail: user.email }),
-          cache: 'no-store',
-      });
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionName: tempSessionName, userEmail: user.email }),
+        cache: "no-store",
+      })
 
-      const startSessionData = await startSessionResponse.json();
+      const startSessionData = await startSessionResponse.json()
 
       if (!startSessionResponse.ok) {
-         console.error(`[Frontend] Error from API generating QR (${startSessionResponse.status}):`, startSessionData);
-         throw new Error(startSessionData.message || `Falha ao gerar QR Code: Status ${startSessionResponse.status}`);
+        console.error(`[Frontend] Error from API generating QR (${startSessionResponse.status}):`, startSessionData)
+        throw new Error(startSessionData.message || `Falha ao gerar QR Code: Status ${startSessionResponse.status}`)
       }
 
       // Successfully initiated, save association
-      await saveUserSession(user.email, tempSessionName);
+      await saveUserSession(user.email, tempSessionName)
 
       // Check response for QR code or connected status
       if (startSessionData.qrCode) {
-          // console.log("[Frontend] QR Code received directly. Displaying.");
-          setQrCode(startSessionData.qrCode);
-          setConnectionStatus("connecting");
-          startStatusChecking(tempSessionName); // Start polling
-      } else if (startSessionData.status === 'CONNECTED' || startSessionData.status === 'WORKING' || startSessionData.status === 'AUTHENTICATED') {
-          // console.log("[Frontend] API reported session already connected during QR request.");
-          setConnectionStatus("connected");
-          setQrCode(null);
-          setLastConnection(new Date().toLocaleString());
-          await updateSessionStatus(user.email, "CONNECTED");
+        // console.log("[Frontend] QR Code received directly. Displaying.");
+        setQrCode(startSessionData.qrCode)
+        setConnectionStatus("connecting")
+        startStatusChecking(tempSessionName) // Start polling
+      } else if (
+        startSessionData.status === "CONNECTED" ||
+        startSessionData.status === "WORKING" ||
+        startSessionData.status === "AUTHENTICATED"
+      ) {
+        // console.log("[Frontend] API reported session already connected during QR request.");
+        setConnectionStatus("connected")
+        setQrCode(null)
+        setLastConnection(new Date().toLocaleString())
+        await updateSessionStatus(user.email, "CONNECTED")
       } else {
-          // Might need polling if QR wasn't returned directly
-          console.warn("[Frontend] QR not returned directly, starting polling based on session status:", startSessionData.status);
-          setConnectionStatus("connecting"); // Assume connecting and poll
-          startStatusChecking(tempSessionName);
+        // Might need polling if QR wasn't returned directly
+        console.warn(
+          "[Frontend] QR not returned directly, starting polling based on session status:",
+          startSessionData.status,
+        )
+        setConnectionStatus("connecting") // Assume connecting and poll
+        startStatusChecking(tempSessionName)
       }
-
     } catch (error) {
       console.error("[Frontend] GENERAL ERROR in generateQRCode flow:", error)
       setConnectionStatus("error")
@@ -398,8 +411,8 @@ export default function ConfiguracoesPage() {
   // Start Periodic Status Checking After QR Display
   const startStatusChecking = (sessionNameToCheck: string) => {
     if (statusCheckInterval) {
-      clearInterval(statusCheckInterval);
-      statusCheckInterval = null;
+      clearInterval(statusCheckInterval)
+      statusCheckInterval = null
     }
 
     // console.log(`[StatusCheck] Starting for ${sessionNameToCheck} (Interval: 5s, Timeout: 2min)`)
@@ -407,15 +420,20 @@ export default function ConfiguracoesPage() {
     const maxAttempts = 24 // 2 minutes timeout
 
     statusCheckInterval = setInterval(async () => {
-      if (attemptCount >= maxAttempts || connectionStatus === "connected" || connectionStatus === "error" || sessionName !== sessionNameToCheck) {
+      if (
+        attemptCount >= maxAttempts ||
+        connectionStatus === "connected" ||
+        connectionStatus === "error" ||
+        sessionName !== sessionNameToCheck
+      ) {
         if (statusCheckInterval) {
-          clearInterval(statusCheckInterval);
-          statusCheckInterval = null;
-          // console.log(`[StatusCheck] Stopped for <span class="math-inline">\{sessionNameToCheck\}\. Reason\: Attempts\=</span>{attemptCount}, Status=<span class="math-inline">\{connectionStatus\}, SessionChanged\=</span>{sessionName !== sessionNameToCheck}.`)
+          clearInterval(statusCheckInterval)
+          statusCheckInterval = null
+          // console.log(`[StatusCheck] Stopped for ${sessionNameToCheck}. Reason: Attempts=${attemptCount}, Status=${connectionStatus}, SessionChanged=${sessionName !== sessionNameToCheck}.`)
           if (attemptCount >= maxAttempts && connectionStatus === "connecting" && sessionName === sessionNameToCheck) {
-            setConnectionStatus("error");
-            setQrCode(null);
-            setErrorMessage("Tempo expirado para escanear o QR Code. Gere um novo.");
+            setConnectionStatus("error")
+            setQrCode(null)
+            setErrorMessage("Tempo expirado para escanear o QR Code. Gere um novo.")
             // Consider logging out the session on the backend if possible on timeout
           }
         }
@@ -426,50 +444,56 @@ export default function ConfiguracoesPage() {
 
       try {
         const apiUrl = process.env.NEXT_PUBLIC_VERCEL_URL
-                       ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-                       : 'https://api.parabenspravoce.com'; // Fallback or local URL
-        const statusEndpoint = `<span class="math-inline">\{apiUrl\}/api/sessions/</span>{sessionNameToCheck}/status`;
-        const statusResponse = await fetch(statusEndpoint, { cache: "no-store" });
+          ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
+          : "https://api.parabenspravoce.com" // Fallback or local URL
+        const statusEndpoint = `${apiUrl}/api/sessions/${sessionNameToCheck}/status`
+        const statusResponse = await fetch(statusEndpoint, { cache: "no-store" })
 
         // Handle non-JSON responses gracefully
-        const contentType = statusResponse.headers.get("content-type");
+        const contentType = statusResponse.headers.get("content-type")
         if (!contentType || !contentType.includes("application/json")) {
-            const responseText = await statusResponse.text();
-            // console.warn(`[StatusCheck] Non-JSON response (${statusResponse.status}). Body: ${responseText.substring(0,100)}`);
-            if (statusResponse.status === 404) {
-               setErrorMessage(`Sessão ${sessionNameToCheck} não encontrada. Gere um novo QR code.`);
-               setConnectionStatus("error");
-               setQrCode(null);
-               if (statusCheckInterval) clearInterval(statusCheckInterval);
-               statusCheckInterval = null;
-            }
-            return; // Skip processing this interval
+          const responseText = await statusResponse.text()
+          // console.warn(`[StatusCheck] Non-JSON response (${statusResponse.status}). Body: ${responseText.substring(0,100)}`);
+          if (statusResponse.status === 404) {
+            setErrorMessage(`Sessão ${sessionNameToCheck} não encontrada. Gere um novo QR code.`)
+            setConnectionStatus("error")
+            setQrCode(null)
+            if (statusCheckInterval) clearInterval(statusCheckInterval)
+            statusCheckInterval = null
+          }
+          return // Skip processing this interval
         }
 
-        const statusResult = await statusResponse.json();
+        const statusResult = await statusResponse.json()
         // console.log(`[StatusCheck] <- Response ${statusResponse.status}:`, statusResult);
 
         if (!statusResponse.ok) {
           // console.warn(`[StatusCheck] Non-OK status (${statusResponse.status}) from API.`);
-          return; // Continue polling unless it's 404 (handled above)
+          return // Continue polling unless it's 404 (handled above)
         }
 
-        const currentState = statusResult.state || statusResult.status;
-        if (currentState === "CONNECTED" || currentState === "WORKING" || currentState === "AUTHENTICATED" || statusResult.connected === true || statusResult.authenticated === true) {
+        const currentState = statusResult.state || statusResult.status
+        if (
+          currentState === "CONNECTED" ||
+          currentState === "WORKING" ||
+          currentState === "AUTHENTICATED" ||
+          statusResult.connected === true ||
+          statusResult.authenticated === true
+        ) {
           // console.log("[StatusCheck] CONNECTED!")
-          setConnectionStatus("connected");
-          setQrCode(null);
-          setLastConnection(new Date().toLocaleString());
+          setConnectionStatus("connected")
+          setQrCode(null)
+          setLastConnection(new Date().toLocaleString())
           if (user?.email) {
-            await updateSessionStatus(user.email, "CONNECTED");
+            await updateSessionStatus(user.email, "CONNECTED")
           }
-          if (statusCheckInterval) clearInterval(statusCheckInterval); // Stop polling immediately
-          statusCheckInterval = null;
+          if (statusCheckInterval) clearInterval(statusCheckInterval) // Stop polling immediately
+          statusCheckInterval = null
         } else {
           // console.log(`[StatusCheck] Current status: ${currentState || "Unknown"}`)
         }
       } catch (error) {
-        console.error(`[StatusCheck] Network/Fetch error checking status for ${sessionNameToCheck}:`, error);
+        console.error(`[StatusCheck] Network/Fetch error checking status for ${sessionNameToCheck}:`, error)
       }
     }, 5000) // Check every 5 seconds
   }
@@ -520,14 +544,14 @@ export default function ConfiguracoesPage() {
                       {lastConnection && (
                         <p className="text-xs sm:text-sm text-gray-500 mb-4">Última conexão: {lastConnection}</p>
                       )}
-                       {/* Session info box */}
+                      {/* Session info box */}
                       <div className="mt-2 p-3 bg-blue-50 border border-blue-100 rounded-md w-full max-w-md">
                         <p className="text-sm text-blue-700 font-medium mb-1 flex items-center">
                           <Info className="h-4 w-4 mr-1.5 text-blue-500 flex-shrink-0" />
                           Informações da Sessão
                         </p>
                         {user?.email && <p className="text-xs text-blue-600 break-words">Associada a: {user.email}</p>}
-                         {/* Removed session name display from here as it's shown above */}
+                        {/* Removed session name display from here as it's shown above */}
                       </div>
                       <Alert variant="default" className="mt-4 max-w-md bg-yellow-50 border-yellow-100">
                         <AlertTriangle className="h-4 w-4 text-yellow-600" />
@@ -537,16 +561,20 @@ export default function ConfiguracoesPage() {
                           Configurações &gt; Aparelhos Conectados. A seguir, clique em "Gerar QR Code".
                         </AlertDescription>
                       </Alert>
-                       {/* Re-enable QR generation button */}
-                       <Button
-                         className="mt-4 bg-green-600 hover:bg-green-700 text-white px-6 py-3"
-                         onClick={generateQRCode}
-                         disabled={isGeneratingQR}
-                         size="lg"
-                       >
-                        {isGeneratingQR ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <RefreshCw className="h-5 w-5 mr-2" />}
-                         {isGeneratingQR ? "Gerando..." : "Gerar Novo QR Code"}
-                       </Button>
+                      {/* Re-enable QR generation button */}
+                      <Button
+                        className="mt-4 bg-green-600 hover:bg-green-700 text-white px-6 py-3"
+                        onClick={generateQRCode}
+                        disabled={isGeneratingQR}
+                        size="lg"
+                      >
+                        {isGeneratingQR ? (
+                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-5 w-5 mr-2" />
+                        )}
+                        {isGeneratingQR ? "Gerando..." : "Gerar Novo QR Code"}
+                      </Button>
                     </div>
                   )}
 
@@ -557,7 +585,7 @@ export default function ConfiguracoesPage() {
                         <>
                           <div className="mb-4 p-1 border bg-white shadow-md">
                             <img
-                              src={qrCode}
+                              src={qrCode || "/placeholder.svg"}
                               alt="QR Code WhatsApp"
                               className="w-56 h-56 sm:w-64 sm:h-64 object-contain"
                             />
@@ -568,7 +596,8 @@ export default function ConfiguracoesPage() {
                           </p>
                           {sessionName && (
                             <p className="text-xs sm:text-sm text-blue-600 mb-3">
-                              Sessão: <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">{sessionName}</span>
+                              Sessão:{" "}
+                              <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">{sessionName}</span>
                             </p>
                           )}
                           <div className="flex items-center text-amber-700 bg-amber-50 px-3 py-1.5 rounded-md border border-amber-100 mb-4 text-xs sm:text-sm">
@@ -580,13 +609,13 @@ export default function ConfiguracoesPage() {
                             size="sm"
                             className="mt-2 text-red-600 border-red-300 hover:bg-red-50"
                             onClick={() => {
-                              setConnectionStatus("disconnected");
-                              setQrCode(null);
-                              setErrorMessage(null);
+                              setConnectionStatus("disconnected")
+                              setQrCode(null)
+                              setErrorMessage(null)
                               // Do not clear sessionName, might be needed for backend cleanup if applicable
-                              if (statusCheckInterval) clearInterval(statusCheckInterval);
-                              statusCheckInterval = null;
-                              console.log("QR Scan Cancelled by user.");
+                              if (statusCheckInterval) clearInterval(statusCheckInterval)
+                              statusCheckInterval = null
+                              console.log("QR Scan Cancelled by user.")
                             }}
                           >
                             Cancelar
@@ -599,7 +628,8 @@ export default function ConfiguracoesPage() {
                           <p className="text-gray-600 text-sm">Aguarde um momento.</p>
                           {sessionName && (
                             <p className="text-xs sm:text-sm text-blue-600 mt-3">
-                              Sessão: <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">{sessionName}</span>
+                              Sessão:{" "}
+                              <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">{sessionName}</span>
                             </p>
                           )}
                         </>
@@ -607,7 +637,7 @@ export default function ConfiguracoesPage() {
                     </div>
                   )}
 
-                   {/* --- ERROR State --- */}
+                  {/* --- ERROR State --- */}
                   {connectionStatus === "error" && (
                     <div className="flex flex-col items-center text-center">
                       <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-red-100 flex items-center justify-center text-red-600 mb-4">
@@ -618,7 +648,11 @@ export default function ConfiguracoesPage() {
                         {errorMessage || "Ocorreu um erro desconhecido."}
                       </p>
                       <Button variant="default" onClick={generateQRCode} disabled={isGeneratingQR}>
-                        {isGeneratingQR ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                        {isGeneratingQR ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                        )}
                         Tentar Novamente
                       </Button>
                     </div>
@@ -640,11 +674,17 @@ export default function ConfiguracoesPage() {
                         disabled={isGeneratingQR}
                         size="lg"
                       >
-                       {isGeneratingQR ? <Loader2 className="h-5 w-5 mr-2 animate-spin" /> : <RefreshCw className="h-5 w-5 mr-2" />}
-                       {isGeneratingQR ? "Gerando..." : "Gerar QR Code"}
+                        {isGeneratingQR ? (
+                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                        ) : (
+                          <RefreshCw className="h-5 w-5 mr-2" />
+                        )}
+                        {isGeneratingQR ? "Gerando..." : "Gerar QR Code"}
                       </Button>
-                       {userSessionInfo.hasSession && userSessionInfo.sessionName && (
-                        <p className="text-xs text-gray-400 mt-4">(Sessão anterior registrada: {userSessionInfo.sessionName})</p>
+                      {userSessionInfo.hasSession && userSessionInfo.sessionName && (
+                        <p className="text-xs text-gray-400 mt-4">
+                          (Sessão anterior registrada: {userSessionInfo.sessionName})
+                        </p>
                       )}
                     </div>
                   )}
@@ -680,68 +720,77 @@ export default function ConfiguracoesPage() {
                         <h3 className="font-medium text-base sm:text-lg">Horário Padrão de Envio</h3>
                       </div>
                       <div className="bg-green-50/60 p-4 rounded-lg border border-green-100">
-                         <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-4">
-                            <Label htmlFor="hora" className="text-sm text-green-800 text-center sm:text-left">
-                              Horário para envio automático:
-                            </Label>
-                            <Input
-                              id="hora" type="time" value={horarioSelecionado}
-                              className="text-center text-lg font-medium w-32 bg-white border-green-200 focus:border-green-400 focus:ring-green-400"
-                              onChange={(e) => {
-                                const newTime = e.target.value;
-                                if (newTime) {
-                                   setHorarioSelecionado(newTime);
-                                   // Removed direct save, using modal
-                                }
-                              }}
-                            />
-                            <Button
-                              size="sm"
-                              className="bg-green-600 hover:bg-green-700 text-white"
-                              onClick={() => setShowConfirmModal(true)}
-                            >
-                              Salvar Horário
-                            </Button>
-                         </div>
-                         <p className="text-xs text-gray-500 mt-2 text-center sm:text-left pl-1">Horário de Brasília (GMT-3)</p>
-                         {/* Removed CountdownTimer component call */}
+                        <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-4">
+                          <Label htmlFor="hora" className="text-sm text-green-800 text-center sm:text-left">
+                            Horário para envio automático:
+                          </Label>
+                          <Input
+                            id="hora"
+                            type="time"
+                            value={horarioSelecionado}
+                            className="text-center text-lg font-medium w-32 bg-white border-green-200 focus:border-green-400 focus:ring-green-400"
+                            onChange={(e) => {
+                              const newTime = e.target.value
+                              if (newTime) {
+                                setHorarioSelecionado(newTime)
+                                // Removed direct save, using modal
+                              }
+                            }}
+                          />
+                          <Button
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                            onClick={() => setShowConfirmModal(true)}
+                          >
+                            Salvar Horário
+                          </Button>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-2 text-center sm:text-left pl-1">
+                          Horário de Brasília (GMT-3)
+                        </p>
+                        {/* Removed CountdownTimer component call */}
                       </div>
                     </div>
                     {/* Message Personalization Setting */}
                     <div className="pt-6 border-t">
-                       <div className="flex items-center gap-2 mb-3">
-                         <MessageSquare className="h-5 w-5 text-indigo-600" />
-                         <h3 className="font-medium text-base sm:text-lg">Personalização de Mensagens</h3>
-                       </div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <MessageSquare className="h-5 w-5 text-indigo-600" />
+                        <h3 className="font-medium text-base sm:text-lg">Personalização de Mensagens</h3>
+                      </div>
                       <div className="space-y-4">
-                         <div className="flex items-start space-x-3 p-3 bg-indigo-50/50 rounded-md border border-indigo-100">
-                            <Switch id="use-name" disabled={true} checked={true} /> {/* Always enabled */}
-                            <div className="flex-1">
-                              <Label htmlFor="use-name" className="font-medium text-sm sm:text-base text-indigo-900">
-                                Incluir nome do contato automaticamente
-                              </Label>
-                              <p className="text-xs sm:text-sm text-indigo-700 mt-1">
-                                A tag <code className="text-xs bg-indigo-100 px-1 py-0.5 rounded font-mono">{`{nome}`}</code> será sempre substituída pelo primeiro nome do contato.
-                              </p>
-                            </div>
-                         </div>
-                         <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
-                           <h4 className="text-xs font-semibold mb-2 text-gray-700 uppercase tracking-wider">Exemplo</h4>
-                           <div className="space-y-2">
+                        <div className="flex items-start space-x-3 p-3 bg-indigo-50/50 rounded-md border border-indigo-100">
+                          <Switch id="use-name" disabled={true} checked={true} /> {/* Always enabled */}
+                          <div className="flex-1">
+                            <Label htmlFor="use-name" className="font-medium text-sm sm:text-base text-indigo-900">
+                              Incluir nome do contato automaticamente
+                            </Label>
+                            <p className="text-xs sm:text-sm text-indigo-700 mt-1">
+                              A tag{" "}
+                              <code className="text-xs bg-indigo-100 px-1 py-0.5 rounded font-mono">{`{nome}`}</code>{" "}
+                              será sempre substituída pelo primeiro nome do contato.
+                            </p>
+                          </div>
+                        </div>
+                        <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
+                          <h4 className="text-xs font-semibold mb-2 text-gray-700 uppercase tracking-wider">Exemplo</h4>
+                          <div className="space-y-2">
                             <div>
                               <p className="text-xs text-gray-500">Mensagem configurada:</p>
                               <p className="text-sm bg-white p-2 rounded border border-dashed">
-                                Feliz aniversário, <code className="text-xs bg-gray-100 px-1 py-0.5 rounded font-mono">{`{nome}`}</code>! Que Deus abençoe sua vida.
+                                Feliz aniversário,{" "}
+                                <code className="text-xs bg-gray-100 px-1 py-0.5 rounded font-mono">{`{nome}`}</code>!
+                                Que Deus abençoe sua vida.
                               </p>
                             </div>
                             <div>
                               <p className="text-xs text-gray-500">Mensagem enviada para "Maria Silva":</p>
                               <p className="text-sm bg-white p-2 rounded border">
-                                Feliz aniversário, <span className="font-medium text-green-600">Maria</span>! Que Deus abençoe sua vida.
+                                Feliz aniversário, <span className="font-medium text-green-600">Maria</span>! Que Deus
+                                abençoe sua vida.
                               </p>
                             </div>
-                           </div>
-                         </div>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -770,8 +819,8 @@ export default function ConfiguracoesPage() {
                 <Button
                   className="bg-green-600 hover:bg-green-700 text-white flex-1"
                   onClick={() => {
-                    setShowConfirmModal(false);
-                    saveTimeToFirestore(horarioSelecionado); // Save the confirmed time
+                    setShowConfirmModal(false)
+                    saveTimeToFirestore(horarioSelecionado) // Save the confirmed time
                   }}
                 >
                   Confirmar
@@ -810,11 +859,14 @@ function CountdownTimer({ targetTime }: { targetTime: string }) {
 
         const diffInSeconds = differenceInSeconds(targetDate, now)
 
-        if (diffInSeconds >= 0 && diffInSeconds <= 86400) { // Within 24 hours
+        if (diffInSeconds >= 0 && diffInSeconds <= 86400) {
+          // Within 24 hours
           const hours = Math.floor(diffInSeconds / 3600)
           const minutes = Math.floor((diffInSeconds % 3600) / 60)
           const seconds = diffInSeconds % 60
-          setTimeRemaining(`<span class="math-inline">\{hours\.toString\(\)\.padStart\(2, "0"\)\}\:</span>{minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`)
+          setTimeRemaining(
+            `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`,
+          )
           setIsNear(true)
         } else {
           setTimeRemaining("...")
@@ -840,9 +892,7 @@ function CountdownTimer({ targetTime }: { targetTime: string }) {
       <div className="bg-white px-3 py-1.5 rounded-md border border-green-200 inline-block">
         <span className="font-mono text-base sm:text-lg font-semibold text-green-700">{timeRemaining}</span>
       </div>
-      <p className="text-xs text-gray-500 mt-1.5 px-2">
-        O sistema verificará no servidor neste horário.
-      </p>
+      <p className="text-xs text-gray-500 mt-1.5 px-2">O sistema verificará no servidor neste horário.</p>
     </div>
   )
 }

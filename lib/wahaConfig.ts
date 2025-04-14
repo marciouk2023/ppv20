@@ -1,4 +1,5 @@
-// Caminho do arquivo: lib/wahaConfig.ts
+// Arquivo: lib/wahaConfig.ts
+// Vamos garantir que a configuração esteja correta
 
 export const WAHA_CONFIG = {
   /**
@@ -25,4 +26,11 @@ export const getWAHABaseURL = () => {
     process.env.NEXT_PUBLIC_WAHA_API_URL ||
     "https://api.parabenspravoce.com"
   )
+}
+
+// NOVA FUNÇÃO: Obter URL completa para endpoints de sessão
+export const getSessionEndpointURL = (sessionName: string, endpoint: string) => {
+  const baseURL = getWAHABaseURL()
+  // Caminho correto: /api/sessions/[sessionName]/[endpoint]
+  return `${baseURL}/api/sessions/${sessionName}/${endpoint}`
 }
