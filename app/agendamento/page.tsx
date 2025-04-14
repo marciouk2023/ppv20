@@ -396,129 +396,327 @@ export default function AgendamentoPage() {
    }
  }
 
-   return (
-     <div className="flex min-h-screen bg-[#f8f7f2]">
-       {/* Sidebar */}
-       <Sidebar activePage="agendamento" />
+ return (
+   <div className="flex min-h-screen bg-[#f8f7f2]">
+     {/* Sidebar */}
+     <Sidebar activePage="agendamento" />
 
-       {/* Main content */}
-       <div className="flex-1 p-6 ml-[196px]">
-         <div className="max-w-6xl mx-auto">
-           <h1 className="text-2xl font-semibold text-[#1e3a29] mb-2">Agendamento de Mensagens</h1>
-           <p className="text-gray-600 mb-6">
-             Agende mensagens para serem enviadas automaticamente em datas específicas.
-           </p>
+     {/* Main content */}
+     <div className="flex-1 p-6 ml-[196px]">
+       <div className="max-w-6xl mx-auto">
+         <h1 className="text-2xl font-semibold text-[#1e3a29] mb-2">Agendamento de Mensagens</h1>
+         <p className="text-gray-600 mb-6">
+           Agende mensagens para serem enviadas automaticamente em datas específicas.
+         </p>
 
-           {/* Main tabs */}
-           <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
-             <TabsList className="grid w-full grid-cols-2">
-               <TabsTrigger value="contacts" className="flex items-center gap-2">
-                 <Users className="h-4 w-4" />
-                 Agendar Mensagens
-               </TabsTrigger>
-               <TabsTrigger value="scheduled" className="flex items-center gap-2">
-                 <Calendar className="h-4 w-4" />
-                 Mensagens Agendadas
-               </TabsTrigger>
-             </TabsList>
+         {/* Main tabs */}
+         <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
+           <TabsList className="grid w-full grid-cols-2">
+             <TabsTrigger value="contacts" className="flex items-center gap-2">
+               <Users className="h-4 w-4" />
+               Agendar Mensagens
+             </TabsTrigger>
+             <TabsTrigger value="scheduled" className="flex items-center gap-2">
+               <Calendar className="h-4 w-4" />
+               Mensagens Agendadas
+             </TabsTrigger>
+           </TabsList>
 
-             {/* Contacts tab content */}
+           {/* Contacts tab content */}
+           <TabsContent value="contacts" className="space-y-6">
+             <div className="grid grid-cols-10 gap-4">
+               {/* Contact selection card - 40% de largura */}
+               <div className="col-span-10 lg:col-span-4">
+                 <Card>
+                   <CardHeader>
+                     <CardTitle className="text-lg font-medium flex items-center">
+                       <Users className="h-5 w-5 mr-2 text-blue-500" />
+                       Selecionar Contato
+                     </CardTitle>
+                     <CardDescription>Escolha o contato para enviar a mensagem de aniversário</CardDescription>
+                   </CardHeader>
+                   <CardContent className="space-y-4">
+                     {/* Search and filters */}
+                     <div className="flex flex-col md:flex-row gap-4">
+                       <div className="flex-1 relative">
+                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                         <Input
+                           placeholder="Buscar contatos..."
+                           value={searchTerm}
+                           onChange={(e) => setSearchTerm(e.target.value)}
+                           className="pl-10"
+                         />
+                       </div>
+                       <div className="flex flex-wrap gap-2">
+                         {availableGroups.map((group) => (
+                           <Button
+                             key={group}
+                             variant={selectedGroups.includes(group) ? "default" : "outline"}
+                             size="sm"
+                             className={selectedGroups.includes(group) ? "bg-green-500 hover:bg-green-600" : ""}
+                             onClick={() => toggleGroupSelection(group)}
+                           >
+                             {group}
+                           </Button>
+                         ))}
+                       </div>
+                     </div>
 
-             <TabsContent value="contacts" className="space-y-6">
-               <div className="grid grid-cols-10 gap-4">
-                 {/* Contact selection card - 40% de largura */}
-                 <div className="col-span-10 lg:col-span-4">
-                   <Card>
-                     <CardHeader>
-                       <CardTitle className="text-lg font-medium flex items-center">
-                         <Users className="h-5 w-5 mr-2 text-blue-500" />
-                         Selecionar Contato
-                       </CardTitle>
-                       <CardDescription>Escolha o contato para enviar a mensagem de aniversário</CardDescription>
-                     </CardHeader>
-                     <CardContent className="space-y-4">
-                       {/* Search and filters */}
-                       <div className="flex flex-col md:flex-row gap-4">
-                         <div className="flex-1 relative">
-                           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                           <Input
-                             placeholder="Buscar contatos..."
-                             value={searchTerm}
-                             onChange={(e) => setSearchTerm(e.target.value)}
-                             className="pl-10"
-                           />
-                         </div>
-                         <div className="flex flex-wrap gap-2">
-                           {availableGroups.map((group) => (
-                             <Button
-                               key={group}
-                               variant={selectedGroups.includes(group) ? "default" : "outline"}
-                               size="sm"
-                               className={selectedGroups.includes(group) ? "bg-green-500 hover:bg-green-600" : ""}
-                               onClick={() => toggleGroupSelection(group)}
-                             >
-                               {group}
-                             </Button>
-                           ))}
+                     {/* Contacts list */}
+                     <div className="border rounded-md">
+                       <div className="p-3 border-b bg-gray-50 flex items-center">
+                         <div className="flex items-center space-x-2">{/* REMOVING SELECT ALL CHECKBOX */}</div>
+                         <div className="ml-auto text-sm text-gray-500">
+                           {filteredContacts.length} contatos encontrados
                          </div>
                        </div>
 
-                       {/* Contacts list */}
-                       <div className="border rounded-md">
-                         <div className="p-3 border-b bg-gray-50 flex items-center">
-                           <div className="flex items-center space-x-2">{/* REMOVING SELECT ALL CHECKBOX */}</div>
-                           <div className="ml-auto text-sm text-gray-500">
-                             {filteredContacts.length} contatos encontrados
+                       <div className="max-h-[400px] overflow-y-auto">
+                         {loading ? (
+                           <div className="flex justify-center items-center py-8">
+                             <Loader2 className="h-8 w-8 animate-spin text-green-500" />
                            </div>
-                         </div>
+                         ) : filteredContacts.length === 0 ? (
+                           <div className="p-4 text-center text-gray-500">
+                             Nenhum contato encontrado para os filtros selecionados.
+                           </div>
+                         ) : (
+                           <div className="divide-y">
+                             {filteredContacts.map((contact) => (
+                               <div
+                                 key={contact.id}
+                                 className={`flex items-center p-3 hover:bg-gray-50 ${
+                                   contact.diasParaAniversario === 0
+                                     ? "bg-green-100 border-l-4 border-green-500"
+                                     : contact.diasParaAniversario === 1
+                                       ? "bg-blue-100 border-l-4 border-blue-400"
+                                       : contact.diasParaAniversario !== undefined && contact.diasParaAniversario <= 7
+                                         ? "bg-blue-50 border-l-2 border-blue-300"
+                                         : ""
+                                 }`}
+                               >
+                                 <Checkbox
+                                   id={`contact-${contact.id}`}
+                                   checked={selectedContact === contact.id}
+                                   onCheckedChange={() => toggleContactSelection(contact.id)}
+                                   disabled={!contact.telefone}
+                                 />
+                                 <label
+                                   htmlFor={`contact-${contact.id}`}
+                                   className="ml-2 flex-1 cursor-pointer flex items-center justify-between"
+                                 >
+                                   <div className="flex items-center gap-3">
+                                     {/* Contact image or initial */}
+                                     <div className="h-10 w-10 rounded-full overflow-hidden flex-shrink-0">
+                                       {contact.imagem ? (
+                                         <img
+                                           src={contact.imagem || "/placeholder.svg"}
+                                           alt={contact.nome}
+                                           className="h-full w-full object-cover"
+                                         />
+                                       ) : (
+                                         <div
+                                           className="h-full w-full flex items-center justify-center bg-orange-200 text-orange-600"
+                                         >
+                                           <span className="text-orange-600 font-medium">
+                                             {contact.nome.charAt(0).toUpperCase()}
+                                           </span>
+                                         </div>
+                                       )}
+                                     </div>
+                                     
+                                     {/* Contact info */}
+                                     <div className="flex-1">
+                                       <div className="font-medium">{contact.nome}</div>
+                                       <div className="text-sm text-gray-500 flex items-center gap-2">
+                                         {contact.telefone || "Sem telefone"}
+                                         {contact.diasParaAniversario === 0 ? (
+                                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                                             Hoje!
+                                           </span>
+                                         ) : contact.diasParaAniversario === 1 ? (
+                                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                             Amanhã!
+                                           </span>
+                                         ) : contact.diasParaAniversario !== undefined && contact.diasParaAniversario <= 7 ? (
+                                           <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-600">
+                                             {contact.diasParaAniversario} dias
+                                           </span>
+                                         ) : null}
+                                       </div>
+                                     </div>
+                                   </div>
+                                 </label>
+                               </div>
+                             ))}
+                           </div>
+                         )}
+                       </div>
+                     </div>
+                   </CardContent>
+                 </Card>
+               </div>
 
-                         <div className="max-h-[400px] overflow-y-auto">
-                           {loading ? (
-                             <div className="flex justify-center items-center py-8">
-                               <Loader2 className="h-8 w-8 animate-spin text-green-500" />
-                             </div>
-                           ) : filteredContacts.length === 0 ? (
-                             <div className="p-4 text-center text-gray-500">
-                               Nenhum contato encontrado para os filtros selecionados.
+               {/* Message preview and actions - 60% de largura */}
+               <div className="col-span-10 lg:col-span-6">
+                 <Card>
+                   <CardHeader>
+                     <CardTitle className="text-lg font-medium flex items-center">
+                       <Calendar className="h-5 w-5 mr-2 text-green-500" />
+                       Detalhes do Agendamento
+                     </CardTitle>
+                     <CardDescription>Confirme os detalhes e agende a mensagem</CardDescription>
+                   </CardHeader>
+                   <CardContent className="space-y-4">
+                     {/* Selected contact summary */}
+                     <div className="border rounded-md p-4 bg-gray-50">
+                       <h3 className="text-sm font-medium mb-2">Contato selecionado:</h3>
+                       {selectedContact ? (
+                         (() => {
+                           const contact = contacts.find((c) => c.id === selectedContact)
+                           return contact ? (
+                             <div className="flex items-center gap-3">
+                               <div className="h-10 w-10 rounded-full overflow-hidden flex-shrink-0 bg-orange-200 flex items-center justify-center">
+                                 {contact.imagem ? (
+                                   <img
+                                     src={contact.imagem}
+                                     alt={contact.nome}
+                                     className="h-full w-full object-cover"
+                                   />
+                                 ) : (
+                                   <span className="text-orange-600 font-medium">
+                                     {contact.nome.charAt(0).toUpperCase()}
+                                   </span>
+                                 )}
+                               </div>
+                               <div>
+                                 <div className="font-medium">{contact.nome}</div>
+                                 <div className="text-sm text-gray-500">{contact.telefone}</div>
+                               </div>
                              </div>
                            ) : (
-                             <div className="divide-y">
-                               {filteredContacts.map((contact) => (
-                                 <div
-                                   key={contact.id}
-                                   className={`flex items-center p-3 hover:bg-gray-50 ${
-                                     contact.diasParaAniversario === 0
-                                       ? "bg-green-100 border-l-4 border-green-500"
-                                       : contact.diasParaAniversario === 1
-                                         ? "bg-blue-100 border-l-4 border-blue-400"
-                                         : contact.diasParaAniversario !== undefined && contact.diasParaAniversario <= 7
-                                           ? "bg-blue-50 border-l-2 border-blue-300"
-                                           : ""
-                                   }`}
-                                 >
-                                   <Checkbox
-                                     id={`contact-${contact.id}`}
-                                     checked={selectedContact === contact.id}
-                                     onCheckedChange={() => toggleContactSelection(contact.id)}
-                                     disabled={!contact.telefone}
-                                   />
-                                   <label
-                                     htmlFor={`contact-${contact.id}`}
-                                     className="ml-2 flex-1 cursor-pointer flex items-center justify-between"
-                                   >
-                                     <div className="flex items-center gap-3">
-                                       {/* Contact image or initial */}
-                                       <div className="h-10 w-10 rounded-full overflow-hidden flex-shrink-0">
-                                         {contact.imagem ? (
-                                           <img
-                                             src={contact.imagem || "/placeholder.svg"}
-                                             alt={contact.nome}
-                                             className="h-full w-full object-cover"
-                                           />
-                                         ) : (
-                                           <div
-                                             className={`h-full w-full flex items-center justify-center bg-orange-200 text-orange-600`}
-                                           >
-                                             <span className="text-orange-600 font-medium">
-  {contact.nome.charAt(0).toUpperCase()}
-</span>
+                             <div className="text-gray-500">Contato não encontrado</div>
+                           )
+                         })()
+                       ) : (
+                         <div className="text-gray-500">Nenhum contato selecionado</div>
+                       )}
+                     </div>
+
+                     {/* Message info */}
+                     <div className="border rounded-md p-4">
+                       <h3 className="text-sm font-medium mb-2">Informações da mensagem:</h3>
+                       <div className="space-y-3">
+                         <div>
+                           <span className="text-sm text-gray-600">Tipo de mensagem:</span>
+                           <div className="font-medium">Aniversário</div>
+                         </div>
+                         <div>
+                           <span className="text-sm text-gray-600">Horário de envio:</span>
+                           <div className="font-medium">Seguirá a configuração global (definida em Configurações)</div>
+                         </div>
+                         <div>
+                           <span className="text-sm text-gray-600">Mensagem:</span>
+                           <div className="font-medium text-gray-700 bg-gray-50 p-3 rounded-md border mt-1">
+                             Será selecionada automaticamente uma das mensagens configuradas em "Mensagens"
+                           </div>
+                         </div>
+                       </div>
+                     </div>
+
+                     {/* Action button */}
+                     <Button
+                       className="w-full bg-green-600 hover:bg-green-700"
+                       size="lg"
+                       onClick={handleScheduleMessage}
+                       disabled={!selectedContact || isSubmitting}
+                     >
+                       {isSubmitting ? (
+                         <>
+                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                           Agendando...
+                         </>
+                       ) : (
+                         "Agendar Mensagem"
+                       )}
+                     </Button>
+                   </CardContent>
+                 </Card>
+               </div>
+             </div>
+           </TabsContent>
+
+           {/* Scheduled tab content */}
+           <TabsContent value="scheduled" className="space-y-6">
+             <Card>
+               <CardHeader>
+                 <CardTitle className="text-lg font-medium flex items-center">
+                   <Calendar className="h-5 w-5 mr-2 text-green-500" />
+                   Mensagens Agendadas
+                 </CardTitle>
+                 <CardDescription>
+                   Mensagens programadas para envio automático no horário configurado
+                 </CardDescription>
+               </CardHeader>
+               <CardContent>
+                 {loadingCampaigns ? (
+                   <div className="flex justify-center items-center py-8">
+                     <Loader2 className="h-8 w-8 animate-spin text-green-500" />
+                   </div>
+                 ) : scheduledCampaigns.length === 0 ? (
+                   <div className="text-center py-8 px-4 bg-gray-50 rounded-md border">
+                     <Calendar className="h-12 w-12 mx-auto text-gray-400 mb-2" />
+                     <h3 className="text-lg font-medium text-gray-700 mb-1">Nenhuma mensagem agendada</h3>
+                     <p className="text-gray-500 max-w-md mx-auto">
+                       Você ainda não agendou mensagens específicas para seus contatos. Vá para a aba "Agendar
+                       Mensagens" para criar um novo agendamento.
+                     </p>
+                     <Button
+                       className="mt-4 bg-green-600 hover:bg-green-700"
+                       onClick={() => setActiveTab("contacts")}
+                     >
+                       Agendar Mensagem
+                     </Button>
+                   </div>
+                 ) : (
+                   <div className="space-y-4">
+                     {scheduledCampaigns.map((campaign) => (
+                       <div key={campaign.id} className="border rounded-md p-4 hover:bg-gray-50">
+                         <div className="flex justify-between items-start">
+                           <div>
+                             <h3 className="font-medium">{campaign.contactName}</h3>
+                             <p className="text-sm text-gray-500 mb-2">{campaign.contactPhone}</p>
+                             <div className="bg-gray-100 p-3 rounded text-gray-700 text-sm">
+                               {campaign.message}
+                             </div>
+                           </div>
+                           <Button
+                             variant="outline"
+                             size="sm"
+                             className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                             onClick={() => cancelScheduledMessage(campaign.id)}
+                           >
+                             Cancelar
+                           </Button>
+                         </div>
+                         <div className="flex items-center justify-between mt-3 pt-3 border-t">
+                           <div className="text-xs text-gray-500">
+                             Agendado em: {campaign.createdAt.toLocaleString()}
+                           </div>
+                           <div className="text-xs font-medium text-green-600">
+                             Será enviado no horário configurado
+                           </div>
+                         </div>
+                       </div>
+                     ))}
+                   </div>
+                 )}
+               </CardContent>
+             </Card>
+           </TabsContent>
+         </Tabs>
+       </div>
+     </div>
+   </div>
+ );
+}
