@@ -1097,12 +1097,6 @@ function CountdownTimer({ targetTime }: { targetTime: string }) {
         return
       }
 
-      // Verificar formato da sessão
-      if (!activeSessionName.startsWith("session_") && !activeSessionName.startsWith("default")) {
-        console.warn(`[AutoSend] Session name format may be incorrect: ${activeSessionName}`)
-        // Continuamos mesmo assim, mas registramos o aviso
-      }
-
       // Get today's date parts
       const today = new Date()
       const currentDay = today.getDate()
@@ -1176,105 +1170,116 @@ function CountdownTimer({ targetTime }: { targetTime: string }) {
       if (birthdayContacts.length > 0) {
         console.log(`[AutoSend] Found ${birthdayContacts.length} birthday contact(s) today.`)
 
-        // Load scheduled messages
-        const processedContacts = new Set()
+        // NOVO: Carregar mensagens dos modelos de mensagens
+        const messagesRef = collection(db, `parabenspravoce/${user.email}/messages`)
+        const messagesSnapshot = await getDocs(messagesRef)
+
+        if (messagesSnapshot.empty) {
+          console.error("[AutoSend] Nenhum modelo de mensagem encontrado. Abortando envio.")
+          toast({
+            title: "Falha no Envio Automático",
+            description: "Nenhum modelo de mensagem encontrado. Adicione mensagens na seção 'Mensagens'.",
+            variant: "destructive",
+          })
+          return
+        }
+
+        const templateMessages = messagesSnapshot.docs
+          .map((doc) => ({
+            id: doc.id,
+            content: doc.data().content || "",
+          }))
+          .filter((msg) => msg.content.trim() !== "")
+
+        if (templateMessages.length === 0) {
+          console.error("[AutoSend] Nenhum modelo de mensagem válido encontrado. Abortando envio.")
+          toast({
+            title: "Falha no Envio Automático",
+            description: "Nenhum modelo de mensagem válido encontrado. Verifique as mensagens na seção 'Mensagens'.",
+            variant: "destructive",
+          })
+          return
+        }
+
+        // NOVO: Controle para evitar envio duplicado
+        const sentContactIds = new Set()
 
         for (const contact of birthdayContacts) {
-          // Check for duplicate sends
-          if (processedContacts.has(contact.id)) {
-            console.log(`[AutoSend] Skipping duplicate send to ${contact.nome || contact.id}`)
+          // NOVO: Verificar se já enviamos para este contato
+          if (sentContactIds.has(contact.id)) {
+            console.log(`[AutoSend] Já enviamos mensagem para ${contact.nome || contact.id}. Pulando.`)
             continue
           }
 
-          // Primeiro, verificar se há mensagem agendada para este contato
-          const scheduledMessageRef = collection(db, `parabenspravoce/${user.email}/campaigns`)
-          const scheduledQuery = query(scheduledMessageRef, where("contactId", "==", contact.id))
-          const scheduledSnapshot = await getDocs(scheduledQuery)
-
-          let messageToSend
-          let messageSource = "" // Para rastreamento da origem da mensagem
-
-          if (!scheduledSnapshot.empty) {
-            // Use a mensagem agendada
-            const scheduledMessage = scheduledSnapshot.docs[0].data()
-            messageToSend = scheduledMessage.message
-            messageSource = "Scheduled message"
-            console.log(`[AutoSend] Using scheduled message for ${contact.nome || contact.id}`)
-          } else {
-            // Escolha uma mensagem aleatória dos modelos
-            const birthdayMessages = [
-              "Feliz aniversário, {nome}! Que Deus abençoe sua vida com muita saúde, paz e alegria neste novo ano.",
-              "Parabéns pelo seu dia, {nome}! Desejamos a você um ano repleto de conquistas e momentos felizes. Conte sempre conosco!",
-              "Felicitações pelo seu aniversário, {nome}! Que este novo ciclo seja marcado por bênçãos e realizações. Um grande abraço!",
-              "{nome}, feliz aniversário! Muita saúde, sucesso e felicidades hoje e sempre!",
-            ]
-            const randomIndex = Math.floor(Math.random() * birthdayMessages.length)
-            messageToSend = birthdayMessages[randomIndex]
-            messageSource = `Random template #${randomIndex}`
-            console.log(`[AutoSend] Using random template #${randomIndex} for ${contact.nome || contact.id}`)
+          // Verificar se o contato tem telefone
+          if (!contact.telefone) {
+            console.warn(`[AutoSend] Contato ${contact.nome || contact.id} não possui telefone. Pulando.`)
+            continue
           }
 
-          // Adicionar logs detalhados sobre a mensagem
-          console.log(`[AutoSend] Using message: "${messageToSend}"`)
-          console.log(`[AutoSend] Message source: ${messageSource}`)
+          // NOVO: Escolher uma mensagem aleatória dos modelos carregados
+          const randomIndex = Math.floor(Math.random() * templateMessages.length)
+          const selectedTemplate = templateMessages[randomIndex]
+          let messageToSend = selectedTemplate.content
+
+          console.log(
+            `[AutoSend] Usando modelo de mensagem #${randomIndex} (ID: ${selectedTemplate.id}) para ${contact.nome || contact.id}`,
+          )
 
           // Personalizar com nome
           const firstName = contact.nome ? contact.nome.split(" ")[0] : "você"
-          messageToSend = messageToSend.replace("{nome}", firstName)
+          messageToSend = messageToSend.replace(/\{nome\}/g, firstName)
 
-          if (contact.telefone) {
-            const phoneNumber = contact.telefone // Assuming phone number is correctly formatted
-            console.log(
-              `[AutoSend] Preparing to send to ${contact.nome || contact.id} (${phoneNumber}): "${messageToSend}"`,
-            )
+          const phoneNumber = contact.telefone
+          console.log(
+            `[AutoSend] Enviando para ${contact.nome || contact.id} (${phoneNumber}): "${messageToSend.substring(0, 50)}..."`,
+          )
 
-            try {
-              const response = await fetch("/api/whatsapp/send-message", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  sessionName: activeSessionName, // Use the active session
-                  phoneNumber: phoneNumber,
-                  message: messageToSend,
-                  userEmail: user.email, // For logging/tracking on the backend
-                }),
-              })
+          try {
+            const response = await fetch("/api/whatsapp/send-message", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                sessionName: activeSessionName,
+                phoneNumber: phoneNumber,
+                message: messageToSend,
+                userEmail: user.email,
+                // NOVO: Adicionar ID único para deduplicação no backend
+                messageId: `birthday_${contact.id}_${today.toISOString().split("T")[0]}`,
+              }),
+            })
 
-              const responseData = await response.json()
+            const responseData = await response.json()
 
-              if (!response.ok) {
-                console.error(
-                  `[AutoSend] ❌ Failed to send to ${contact.nome || contact.id} (${phoneNumber}). Status: ${response.status}`,
-                  responseData,
-                )
-              } else {
-                console.log(
-                  `[AutoSend] ✅ Successfully sent to ${contact.nome || contact.id} (${phoneNumber})`,
-                  responseData,
-                )
-              }
-              // Add a small delay between messages to avoid rate limiting issues
-              await new Promise((resolve) => setTimeout(resolve, 1500)) // 1.5 second delay
-            } catch (sendError) {
+            if (!response.ok) {
               console.error(
-                `[AutoSend] ❌ Network/fetch error sending to ${contact.nome || contact.id} (${phoneNumber}):`,
-                sendError,
+                `[AutoSend] ❌ Falha ao enviar para ${contact.nome || contact.id} (${phoneNumber}). Status: ${response.status}`,
+                responseData,
               )
+            } else {
+              console.log(
+                `[AutoSend] ✅ Mensagem enviada com sucesso para ${contact.nome || contact.id} (${phoneNumber})`,
+                responseData,
+              )
+
+              // NOVO: Marcar este contato como já processado
+              sentContactIds.add(contact.id)
             }
 
-            // Add to processed contacts after successful send
-            processedContacts.add(contact.id)
-          } else {
-            console.warn(`[AutoSend] Skipping contact ${contact.nome || contact.id} due to missing phone number.`)
+            // Adicionar um pequeno atraso entre mensagens para evitar problemas de rate limiting
+            await new Promise((resolve) => setTimeout(resolve, 1500)) // 1.5 segundos de atraso
+          } catch (sendError) {
+            console.error(
+              `[AutoSend] ❌ Erro de rede/fetch ao enviar para ${contact.nome || contact.id} (${phoneNumber}):`,
+              sendError,
+            )
           }
-        } // End of loop through contacts
+        }
       } else {
-        console.log("[AutoSend] No contacts found with birthdays today.")
-        // Optionally notify user that no birthdays were found
-        // toast({ title: "Aniversariantes", description: "Nenhum aniversariante encontrado para hoje." })
+        console.log("[AutoSend] Nenhum aniversariante encontrado para hoje.")
       }
     } catch (error) {
-      console.error("[AutoSend] Error during birthday check/send process:", error)
+      console.error("[AutoSend] Erro durante o processo de verificação/envio de aniversários:", error)
       toast({
         title: "Erro no Envio Automático",
         description: "Ocorreu um erro ao verificar/enviar mensagens de aniversário.",

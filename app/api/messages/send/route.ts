@@ -1,5 +1,4 @@
-// app/api/messages/send/route.ts
-// Arquivo renomeado de app/api/whatsapp/send-message/route.ts para app/api/messages/send/route.ts
+// Modificação no arquivo app/api/messages/send/route.ts (ou app/api/whatsapp/send-message/route.ts)
 
 import { type NextRequest, NextResponse } from "next/server"
 import https from "https"
