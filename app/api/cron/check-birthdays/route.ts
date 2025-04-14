@@ -1,7 +1,7 @@
 // app/api/cron/check-birthdays/route.ts WITH DETAILED LOGS
 import { NextResponse } from "next/server"
 import { db } from "@/lib/firebase-config"
-import { collection, getDocs, query, where } from "firebase/firestore"
+import { collection, getDocs } from "firebase/firestore"
 import { sendMessage } from "@/utils/message-sender" // Ensure path is correct
 
 // (getUserBirthdayContacts function remains the same - no logs added here for brevity)
@@ -56,23 +56,29 @@ async function getUserBirthdayContacts(userEmail: string, currentDay: number, cu
   return birthdayContacts
 }
 
-// (getBirthdayMessages function remains the same - no logs added here for brevity)
+// MODIFICADO: Função para buscar mensagens apenas da coleção 'messages' (página /mensagens)
 async function getBirthdayMessages(userEmail: string): Promise<string[]> {
   try {
-    const messagesRef = collection(db, `parabenspravoce/${userEmail}/templates`)
-    const q = query(messagesRef, where("type", "==", "birthday"))
-    const snapshot = await getDocs(q)
+    // ALTERADO: Buscar da coleção 'messages' em vez de 'templates'
+    const messagesRef = collection(db, `parabenspravoce/${userEmail}/messages`)
+
+    // Não filtrar por tipo, pegar todas as mensagens da coleção 'messages'
+    const snapshot = await getDocs(messagesRef)
+
     if (snapshot.empty) {
-      console.log(`[CRON_LOG] No birthday messages (type='birthday') found in /templates for ${userEmail}`)
+      console.log(`[CRON_LOG] No messages found in /messages for ${userEmail}`)
       return []
     }
+
+    // Extrair o conteúdo das mensagens
     const messages = snapshot.docs
-      .map((doc) => doc.data().content || doc.data().message || "")
+      .map((doc) => doc.data().content || doc.data().conteudo || "")
       .filter((msg): msg is string => typeof msg === "string" && msg.trim() !== "")
-    // console.log(`[CRON_LOG] Found ${messages.length} birthday messages in /templates for ${userEmail}`);
+
+    console.log(`[CRON_LOG] Found ${messages.length} messages in /messages for ${userEmail}`)
     return messages
   } catch (error) {
-    console.error(`[CRON_LOG] Error fetching messages from /templates for ${userEmail}:`, error)
+    console.error(`[CRON_LOG] Error fetching messages from /messages for ${userEmail}:`, error)
     return []
   }
 }
@@ -106,7 +112,7 @@ export async function GET(request: Request) {
   const currentDay = executionTime.getUTCDate()
   const currentMonth = executionTime.getUTCMonth() + 1
   console.log(
-    `[CRON_LOG] Current UTC Time: <span class="math-inline">\{String$$currentHour$$\.padStart$$2, "0"$$\}\:</span>{String(currentMinute).padStart(2, "0")}. Date: <span class="math-inline">\{currentDay\}/</span>{currentMonth}`,
+    `[CRON_LOG] Current UTC Time: ${String(currentHour).padStart(2, "0")}:${String(currentMinute).padStart(2, "0")}. Date: ${currentDay}/${currentMonth}`,
   )
 
   const results: Array<{ user: string; contact?: string; status: string; error?: string; messageId?: string }> = []
@@ -154,7 +160,7 @@ export async function GET(request: Request) {
       // Exact Time Check
       const isTimeToSend = configHour === currentHour && configMinute === currentMinute
       console.log(
-        `[CRON_LOG] Time Check for ${userEmail}: (Config: <span class="math-inline">\{configHour\}\:</span>{configMinute} vs Current UTC: <span class="math-inline">\{currentHour\}\:</span>{currentMinute}) -> isTimeToSend: ${isTimeToSend}`,
+        `[CRON_LOG] Time Check for ${userEmail}: (Config: ${configHour}:${configMinute} vs Current UTC: ${currentHour}:${currentMinute}) -> isTimeToSend: ${isTimeToSend}`,
       )
 
       if (!isTimeToSend) {
@@ -193,7 +199,7 @@ export async function GET(request: Request) {
             userEmail,
             contactId: contact.id,
             contactName: contact.nome,
-            contactPhone: contact.telefone,
+            phoneNumber: contact.telefone,
             message: messageTemplate,
             usePersonalization: true,
             messageType: "birthday",

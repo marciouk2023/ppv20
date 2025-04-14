@@ -1,6 +1,6 @@
 // utils/message-sender.ts WITH DETAILED LOGS
 import { db } from "@/lib/firebase-config"
-import { collection, query, where, getDocs, Timestamp, runTransaction, doc } from "firebase/firestore"
+import { Timestamp, runTransaction, doc } from "firebase/firestore"
 // Assuming personalizeMessage exists and works correctly
 import { personalizeMessage } from "@/utils/message-utils" // Ensure path is correct
 
@@ -54,31 +54,10 @@ export async function sendMessage(options: SendMessageOptions): Promise<SendMess
 
   // Gerar um ID único para deduplicação baseado no contato e na data
   const today = new Date().toISOString().split("T")[0] // Formato YYYY-MM-DD
-  const messageId = uniqueId || `${messageType}_${contactId || phoneNumber}_${today}`
+  const contactIdentifier = contactId || phoneNumber.replace(/\D/g, "")
+  // Modificado: Incluir userEmail no messageId para garantir que seja único por usuário
+  const messageId = uniqueId || `${messageType}_${userEmail}_${contactIdentifier}_${today}`
 
-  // Verificar se esta mensagem já foi enviada hoje (deduplicação)
-  const sentMessagesRef = collection(db, "sent_messages")
-  const q = query(
-    sentMessagesRef,
-    where("messageId", "==", messageId),
-    where("timestamp", ">=", new Date(new Date().setHours(0, 0, 0, 0))), // Desde o início do dia atual
-  )
-
-  const snapshot = await getDocs(q)
-  if (!snapshot.empty) {
-    console.log(`[MessageSender] Mensagem duplicada detectada com ID: ${messageId}. Ignorando.`)
-    return {
-      success: true,
-      message: "Mensagem já enviada hoje para este contato (deduplicada)",
-      duplicated: true,
-      messageId,
-    }
-  }
-
-  // ** Generate Message ID **
-  // const dateStr = new Date().toISOString().split("T")[0];
-  // const identifier = contactId || phoneNumber.replace(/\D/g, '');
-  // const messageId = `<span class="math-inline">\{messageType\}\_</span>{userEmail}_${identifier}_${dateStr}`;
   console.log(`[sendMessage_LOG] Generated messageId: ${messageId}`)
 
   try {
