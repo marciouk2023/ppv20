@@ -24,17 +24,17 @@ interface SendBirthdayMessageProps {
 const birthdayMessages = [
   {
     id: 1,
-    content: "Feliz aniversário! Que Deus abençoe sua vida com muita saúde, paz e alegria neste novo ano de vida.",
+    content: "COMPONTE SEND BIRHT 1 Feliz aniversário! Que Deus abençoe sua vida com muita saúde, paz e alegria neste novo ano de vida.",
   },
   {
     id: 2,
     content:
-      "Parabéns pelo seu dia! Desejamos a você um ano repleto de conquistas e momentos felizes. Conte sempre conosco!",
+      "COMPONTE SEND BIRHT 2  Parabéns pelo seu dia! Desejamos a você um ano repleto de conquistas e momentos felizes. Conte sempre conosco!",
   },
   {
     id: 3,
     content:
-      "Felicitações pelo seu aniversário! Que este novo ciclo seja marcado por bênçãos e realizações. Estamos orando por você!",
+      "COMPONTE SEND BIRHT 3 Felicitações pelo seu aniversário! Que este novo ciclo seja marcado por bênçãos e realizações. Estamos orando por você!",
   },
 ]
 
