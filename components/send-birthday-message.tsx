@@ -74,14 +74,39 @@ export function SendBirthdayMessage({
 
     try {
       const finalMessage = replacePlaceholders(getCurrentMessage())
-      await sendMessage(contactPhone, finalMessage, user?.email, contactId, contactName)
 
-      toast({
-        title: "Mensagem enviada!",
-        description: `Mensagem de aniversário enviada para ${contactName}.`,
+      // Gerar um ID único para esta mensagem (baseado na data)
+      const today = new Date().toISOString().split("T")[0] // Formato YYYY-MM-DD
+      const messageId = `manual_birthday_${contactId}_${today}`
+
+      // Chamar a função sendMessage com o ID único
+      const sendResult = await sendMessage({
+        phoneNumber: contactPhone,
+        message: finalMessage,
+        userEmail: user?.email || "",
+        contactId: contactId,
+        contactName: contactName,
+        sessionName: "default", // Usar sessão padrão ou obter de configurações
+        uniqueId: messageId, // Passar o ID único para garantir deduplicação
       })
 
-      if (onSuccess) onSuccess()
+      if (sendResult.success) {
+        if (sendResult.duplicated) {
+          toast({
+            title: "Mensagem já enviada",
+            description: `Uma mensagem já foi enviada para ${contactName} hoje.`,
+          })
+        } else {
+          toast({
+            title: "Mensagem enviada!",
+            description: `Mensagem de aniversário enviada para ${contactName}.`,
+          })
+        }
+
+        if (onSuccess) onSuccess()
+      } else {
+        throw new Error(sendResult.message || "Erro desconhecido ao enviar mensagem.")
+      }
     } catch (err: any) {
       console.error("Erro ao enviar mensagem de aniversário:", err)
       setError(err.message || "Erro desconhecido ao enviar mensagem.")
