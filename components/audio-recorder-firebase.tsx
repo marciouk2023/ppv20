@@ -200,7 +200,7 @@ export function AudioRecorderFirebase() {
       console.log("[AudioRecorder] Enviando áudio...", payload)
 
       // Enviar para o endpoint
-      const response = await fetch("/api/whatsapp/send-audio-direct", {
+      const response = await fetch("https://api.parabenspravoce.com/api/sendVoice", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

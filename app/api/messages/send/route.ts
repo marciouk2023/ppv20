@@ -4,8 +4,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import https from "https"
 import { WAHA_CONFIG } from "@/lib/wahaConfig"
-import { collection, query, where, getDocs, addDoc } from "firebase/firestore"
-import { db } from "@/lib/firebaseConfig"
+import { collection, query, where, getDocs, addDoc, Timestamp } from "firebase/firestore"
+import { db } from "@/lib/firebase-config"
 
 export async function POST(request: NextRequest) {
   const agent = new https.Agent({ rejectUnauthorized: false })
@@ -24,10 +24,13 @@ export async function POST(request: NextRequest) {
       // Verificar se esta mensagem já foi enviada nas últimas 24 horas
       try {
         const recentMessagesRef = collection(db, "recent_messages")
+        const oneDayAgo = new Date()
+        oneDayAgo.setHours(oneDayAgo.getHours() - 24)
+
         const q = query(
           recentMessagesRef,
           where("messageId", "==", messageId),
-          where("timestamp", ">", new Date(Date.now() - 24 * 60 * 60 * 1000)), // Últimas 24 horas
+          where("timestamp", ">=", Timestamp.fromDate(oneDayAgo)),
         )
 
         const snapshot = await getDocs(q)
@@ -45,12 +48,15 @@ export async function POST(request: NextRequest) {
           messageId,
           phoneNumber,
           message: message.substring(0, 50) + (message.length > 50 ? "..." : ""),
-          timestamp: new Date(),
+          timestamp: Timestamp.now(),
         })
       } catch (dedupeError) {
         // Se houver erro na deduplicação, registrar mas continuar com o envio
         console.warn(`[API send-message] Erro ao verificar duplicação: ${dedupeError}. Continuando com o envio.`)
       }
+    } else {
+      // Se não houver messageId, gerar um aviso
+      console.warn("[API send-message] Requisição sem messageId. Recomendado usar messageId para evitar duplicações.")
     }
 
     if (!phoneNumber || !message || !sessionName) {

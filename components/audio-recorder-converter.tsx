@@ -187,7 +187,7 @@ export function AudioRecorderConverter({ phoneNumber, userEmail, onSuccess, onEr
     try {
       setStatus("Sending audio to WhatsApp...")
 
-      const response = await fetch("/api/whatsapp/send-audio-direct", {
+      const response = await fetch("https://api.parabenspravoce.com/api/sendVoice", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

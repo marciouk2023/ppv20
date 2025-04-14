@@ -120,7 +120,7 @@ export function AudioRecorderWhatsApp() {
         const audioData = base64data.split(",")[1] // Remove the data URL prefix
 
         // Send to endpoint
-        const response = await fetch("/api/whatsapp/send-audio-direct", {
+        const response = await fetch("https://api.parabenspravoce.com/api/sendVoice", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

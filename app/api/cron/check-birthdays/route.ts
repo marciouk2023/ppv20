@@ -1,7 +1,8 @@
 // app/api/cron/check-birthdays/route.ts
 import { NextResponse } from "next/server"
 import { db } from "@/lib/firebase-config"
-import { collection, getDocs, query, where, doc, Timestamp } from "firebase/firestore"
+import { collection, getDocs, query, where } from "firebase/firestore"
+import { sendMessage } from "@/utils/message-sender"
 
 // Função auxiliar para buscar contatos aniversariantes
 async function getUserBirthdayContacts(userEmail: string, currentDay: number, currentMonth: number) {
@@ -53,52 +54,6 @@ async function getUserBirthdayContacts(userEmail: string, currentDay: number, cu
   return birthdayContacts
 }
 
-// Função para verificar e marcar mensagem como enviada em uma única transação atômica
-async function checkAndMarkMessageSent(userEmail: string, contactId: string): Promise<boolean> {
-  try {
-    // Usar transação do Firestore para operações atômicas
-    return await db.runTransaction(async (transaction) => {
-      const contactRef = doc(db, `parabenspravoce/${userEmail}/users`, contactId)
-      const contactDoc = await transaction.get(contactRef)
-
-      if (!contactDoc.exists()) {
-        console.log(`[CRON] Contato ${contactId} não encontrado`)
-        return false
-      }
-
-      const contactData = contactDoc.data()
-
-      // Verificar se já enviou hoje
-      if (contactData.lastBirthdayMessageSent) {
-        const lastSent = contactData.lastBirthdayMessageSent.toDate()
-        const today = new Date()
-
-        // Verificar se a data de envio é hoje
-        if (
-          lastSent.getDate() === today.getDate() &&
-          lastSent.getMonth() === today.getMonth() &&
-          lastSent.getFullYear() === today.getFullYear()
-        ) {
-          console.log(`[CRON] Mensagem já enviada hoje para ${contactId}`)
-          return false // Já enviou hoje
-        }
-      }
-
-      // Se não enviou hoje, marcar como enviado na mesma transação
-      transaction.update(contactRef, {
-        lastBirthdayMessageSent: Timestamp.now(),
-        birthdayMessageSentThisYear: true,
-      })
-
-      console.log(`[CRON] Marcando envio de mensagem para ${contactId} (transação)`)
-      return true // Pode enviar
-    })
-  } catch (error) {
-    console.error(`[CRON] Erro na transação para ${contactId}:`, error)
-    return false
-  }
-}
-
 // Função para buscar mensagens da rota /mensagens
 async function getBirthdayMessages(userEmail: string) {
   try {
@@ -125,45 +80,6 @@ async function getBirthdayMessages(userEmail: string) {
     console.error(`[CRON] Erro ao buscar mensagens para ${userEmail}:`, error)
     return []
   }
-}
-
-// Função auxiliar para enviar mensagem
-async function sendWhatsAppMessage(
-  apiUrl: string,
-  contact: { id: string; nome: string; telefone: string },
-  message: string,
-  userEmail: string,
-) {
-  const messageId = `birthday_${userEmail}_${contact.id}_${new Date().toISOString().split("T")[0]}`
-
-  console.log(
-    `[CRON] Tentando enviar para ${contact.nome} (${contact.telefone}) do usuário ${userEmail} com ID: ${messageId}`,
-  )
-  const response = await fetch(apiUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      phoneNumber: contact.telefone,
-      message: message,
-      userEmail: userEmail,
-      messageId: messageId, // Adicionar ID único para deduplicação
-    }),
-  })
-
-  if (!response.ok) {
-    let errorData
-    try {
-      errorData = await response.json()
-    } catch {
-      errorData = { message: await response.text() }
-    }
-    console.error(`[CRON] ❌ Falha ao enviar para ${contact.nome}. Status: ${response.status}. Erro:`, errorData)
-    return { success: false, error: errorData.message || `Erro ${response.status}` }
-  }
-
-  const result = await response.json()
-  console.log(`[CRON] ✅ Mensagem enviada com sucesso para ${contact.nome} (${userEmail}). Resposta API:`, result)
-  return { success: true, result }
 }
 
 export async function GET(request: Request) {
@@ -199,18 +115,6 @@ export async function GET(request: Request) {
   const currentMinute = executionTime.getMinutes()
   const currentDay = executionTime.getDate()
   const currentMonth = executionTime.getMonth() + 1 // getMonth() é 0-11
-
-  // URL da API de envio de mensagem
-  let sendMessageApiUrl: string
-  try {
-    sendMessageApiUrl = new URL("/api/messages/send", request.url).toString()
-  } catch (urlError) {
-    console.warn("[CRON] Falha ao construir URL relativa, usando URL absoluta fallback.")
-    sendMessageApiUrl = process.env.NEXT_PUBLIC_BASE_URL
-      ? `${process.env.NEXT_PUBLIC_BASE_URL}/api/messages/send`
-      : "https://v0-whatsapp-qr-code-bot-hoaqep.vercel.app/api/messages/send"
-  }
-  console.log(`[CRON] Usando URL para envio de mensagem: ${sendMessageApiUrl}`)
 
   const results: Array<{ user: string; contact?: string; status: string; error?: string }> = []
   let totalMessagesAttempted = 0
@@ -285,84 +189,35 @@ export async function GET(request: Request) {
         }
 
         for (const contact of birthdayContacts) {
-          // Usar a nova função de transação para verificar e marcar como enviado atomicamente
-          const canSendMessage = await checkAndMarkMessageSent(userEmail, contact.id)
+          totalMessagesAttempted++
 
-          if (!canSendMessage) {
-            console.log(`[CRON] Pulando envio para ${contact.nome} - já enviado hoje ou erro na transação`)
+          // Escolher uma mensagem aleatória
+          const randomIndex = Math.floor(Math.random() * birthdayMessages.length)
+          const message = birthdayMessages[randomIndex]
+
+          // Usar a função centralizada para enviar a mensagem
+          const sendResult = await sendMessage({
+            userEmail,
+            contactId: contact.id,
+            contactName: contact.nome,
+            contactPhone: contact.telefone,
+            message,
+            usePersonalization: true,
+            messageType: "birthday",
+          })
+
+          if (sendResult.success) {
+            totalMessagesSent++
+            results.push({ user: userEmail, contact: contact.nome, status: "success" })
+            console.log(`[CRON] ✅ Mensagem enviada com sucesso para ${contact.nome} (${userEmail}).`)
+          } else {
             results.push({
               user: userEmail,
               contact: contact.nome,
-              status: "skipped",
-              error: "Mensagem já enviada hoje ou erro na transação",
+              status: "error",
+              error: sendResult.error || "Erro desconhecido ao enviar mensagem",
             })
-            continue
-          }
-
-          totalMessagesAttempted++
-
-          // Gerar ID único para esta mensagem específica (para deduplicação)
-          const messageId = `birthday_${userEmail}_${contact.id}_${new Date().toISOString().split("T")[0]}`
-
-          // [Passo 1] Verificar se existe uma mensagem personalizada agendada
-          const campaignsRef = collection(db, `parabenspravoce/${userEmail}/campaigns`)
-          const q = query(campaignsRef, where("contactId", "==", contact.id), where("status", "==", "scheduled"))
-          const snapshot = await getDocs(q)
-
-          let messageSent = false
-
-          if (!snapshot.empty) {
-            // Se SIM: Enviar apenas essa mensagem personalizada
-            const campaign = snapshot.docs[0].data()
-            console.log(`[CRON] Encontrada mensagem personalizada para ${contact.nome}. Enviando...`)
-
-            // Personalizar mensagem com nome do contato
-            let personalizedMessage = campaign.message || ""
-            if (campaign.usePersonalization !== false) {
-              const firstName = contact.nome && typeof contact.nome === "string" ? contact.nome.split(" ")[0] : "você"
-              personalizedMessage = personalizedMessage.replace(/{nome}/g, firstName)
-            }
-
-            const sendResult = await sendWhatsAppMessage(sendMessageApiUrl, contact, personalizedMessage, userEmail)
-
-            if (sendResult.success) {
-              totalMessagesSent++
-              results.push({ user: userEmail, contact: contact.nome, status: "success" })
-              messageSent = true
-            } else {
-              results.push({
-                user: userEmail,
-                contact: contact.nome,
-                status: "error",
-                error: sendResult.error || "Erro desconhecido ao enviar mensagem personalizada",
-              })
-            }
-          } else if (!messageSent) {
-            // Se NÃO: Buscar uma mensagem aleatória da rota /mensagens
-            const randomIndex = Math.floor(Math.random() * birthdayMessages.length)
-            let message = birthdayMessages[randomIndex]
-
-            // Personalizar mensagem com nome do contato
-            const firstName = contact.nome && typeof contact.nome === "string" ? contact.nome.split(" ")[0] : "você"
-            message = message.replace(/{nome}/g, firstName)
-
-            console.log(
-              `[CRON] Nenhuma mensagem personalizada encontrada para ${contact.nome}. Enviando mensagem aleatória da rota /mensagens...`,
-            )
-
-            const sendResult = await sendWhatsAppMessage(sendMessageApiUrl, contact, message, userEmail)
-
-            if (sendResult.success) {
-              totalMessagesSent++
-              results.push({ user: userEmail, contact: contact.nome, status: "success" })
-            } else {
-              results.push({
-                user: userEmail,
-                contact: contact.nome,
-                status: "error",
-                error: sendResult.error || "Erro desconhecido ao enviar mensagem aleatória",
-              })
-            }
+            console.error(`[CRON] ❌ Falha ao enviar mensagem para ${contact.nome} (${userEmail}): ${sendResult.error}`)
           }
         }
       } catch (userProcessingError) {

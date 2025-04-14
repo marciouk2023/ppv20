@@ -13,7 +13,7 @@ import { Sidebar } from "@/components/sidebar"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/contexts/auth-context"
 import { saveUserSession, updateSessionStatus, checkUserSession } from "@/lib/session-manager"
-import { collection, getDocs, doc, getDoc, setDoc } from "firebase/firestore"
+import { collection, getDocs, doc, getDoc, setDoc, query, where, orderBy } from "firebase/firestore"
 import { db } from "@/lib/firebase-config"
 import { differenceInSeconds } from "date-fns"
 
@@ -49,7 +49,7 @@ function ConnectionStatusBadge({
         if (userSession.hasSession && userSession.sessionName) {
           // If the user has a session, check the status of that specific session
           try {
-            const sessionEndpoint = `/api/whatsapp/sessions/${userSession.sessionName}/status`
+            const sessionEndpoint = `https://api.parabenspravoce.com/api/sessions/${userSession.sessionName}/status`
             const response = await fetch(sessionEndpoint, {
               cache: "no-store", // Ensure fresh data
             })
@@ -261,9 +261,12 @@ export default function ConfiguracoesPage() {
       ) {
         // If Firestore indicates an active session, verify with the API
         try {
-          const response = await fetch(`/api/whatsapp/sessions/${sessionInfo.sessionName}/status`, {
-            cache: "no-store",
-          })
+          const response = await fetch(
+            `https://api.parabenspravoce.com/api/sessions/${sessionInfo.sessionName}/status`,
+            {
+              cache: "no-store",
+            },
+          )
           if (response.ok) {
             const data = await response.json()
             const currentState = data.state || data.status
@@ -381,7 +384,7 @@ export default function ConfiguracoesPage() {
       console.log(`[Frontend] Starting QR flow for session: ${tempSessionName}`)
 
       console.log(`[Frontend] -> Calling Local API: POST /api/whatsapp/sessions`)
-      const createResponse = await fetch("/api/whatsapp/sessions", {
+      const createResponse = await fetch("https://api.parabenspravoce.com/api/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -413,9 +416,12 @@ export default function ConfiguracoesPage() {
       // --- 3. (Optional) Screenshot - Attempt but don't fail the flow if it errors ---
       try {
         console.log(`[Frontend] -> Calling Local API: GET /api/whatsapp/sessions/${tempSessionName}/screenshot`)
-        const screenshotResponse = await fetch(`/api/whatsapp/sessions/${tempSessionName}/screenshot`, {
-          cache: "no-store",
-        })
+        const screenshotResponse = await fetch(
+          `https://api.parabenspravoce.com/api/sessions/${tempSessionName}/screenshot`,
+          {
+            cache: "no-store",
+          },
+        )
         if (!screenshotResponse.ok) {
           console.warn(`[Frontend] Warning: Screenshot failed (${screenshotResponse.status}), continuing...`)
         } else {
@@ -431,7 +437,9 @@ export default function ConfiguracoesPage() {
 
       // --- 5. Fetch QR Code ---
       console.log(`[Frontend] -> Calling Local API: GET /api/whatsapp/sessions/${tempSessionName}/auth/qr`)
-      const qrResponse = await fetch(`/api/whatsapp/sessions/${tempSessionName}/auth/qr`, { cache: "no-store" })
+      const qrResponse = await fetch(`https://api.parabenspravoce.com/api/sessions/${tempSessionName}/auth/qr`, {
+        cache: "no-store",
+      })
 
       // Check if the response is JSON before parsing
       const contentType = qrResponse.headers.get("content-type")
@@ -462,9 +470,12 @@ export default function ConfiguracoesPage() {
           )
           // Attempt to check the *actual* status
           try {
-            const statusCheckResponse = await fetch(`/api/whatsapp/sessions/${tempSessionName}/status`, {
-              cache: "no-store",
-            })
+            const statusCheckResponse = await fetch(
+              `https://api.parabenspravoce.com/api/sessions/${tempSessionName}/status`,
+              {
+                cache: "no-store",
+              },
+            )
             if (statusCheckResponse.ok) {
               const statusData = await statusCheckResponse.json()
               const currentState = statusData.state || statusData.status
@@ -589,7 +600,10 @@ export default function ConfiguracoesPage() {
         console.log(
           `[StatusCheck] Attempt ${attemptCount}/${maxAttempts} -> GET /api/whatsapp/sessions/${sessionNameToCheck}/status`,
         )
-        const statusResponse = await fetch(`/api/whatsapp/sessions/${sessionNameToCheck}/status`, { cache: "no-store" })
+        const statusResponse = await fetch(
+          `https://api.parabenspravoce.com/api/sessions/${sessionNameToCheck}/status`,
+          { cache: "no-store" },
+        )
 
         // Check for non-JSON response first
         const contentType = statusResponse.headers.get("content-type")
@@ -1068,14 +1082,36 @@ function CountdownTimer({ targetTime }: { targetTime: string }) {
       const activeSessionName = userSession.sessionName
       console.log(`[AutoSend] Using session: ${activeSessionName}`)
 
+      // Verificar se a sessão está ativa antes de prosseguir
+      if (
+        userSession.status !== "WORKING" &&
+        userSession.status !== "CONNECTED" &&
+        userSession.status !== "AUTHENTICATED"
+      ) {
+        console.log(`[AutoSend] Session ${activeSessionName} is not ready (status: ${userSession.status}). Aborting.`)
+        toast({
+          title: "Falha no Envio Automático",
+          description: `Sessão do WhatsApp não está pronta (status: ${userSession.status}). Reconecte nas Configurações.`,
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Verificar formato da sessão
+      if (!activeSessionName.startsWith("session_") && !activeSessionName.startsWith("default")) {
+        console.warn(`[AutoSend] Session name format may be incorrect: ${activeSessionName}`)
+        // Continuamos mesmo assim, mas registramos o aviso
+      }
+
       // Get today's date parts
       const today = new Date()
       const currentDay = today.getDate()
       const currentMonth = today.getMonth() + 1 // JS months are 0-11
 
       // Query contacts from Firestore for the current user
-      const contactsRef = collection(db, `parabenspravoce/${user.email}/users`) // Adjust path if needed
-      const snapshot = await getDocs(contactsRef)
+      const contactsRef = collection(db, `parabenspravoce/${user.email}/users`)
+      const q = query(contactsRef, where("data_de_nascimento", "!=", null), orderBy("nome"))
+      const snapshot = await getDocs(q)
 
       const birthdayContacts = snapshot.docs
         .map((doc) => ({ id: doc.id, ...doc.data() })) // Include doc ID and data
@@ -1140,24 +1176,50 @@ function CountdownTimer({ targetTime }: { targetTime: string }) {
       if (birthdayContacts.length > 0) {
         console.log(`[AutoSend] Found ${birthdayContacts.length} birthday contact(s) today.`)
 
-        const birthdayMessages = [
-          "Feliz aniversário, {nome}! Que Deus abençoe sua vida com muita saúde, paz e alegria neste novo ano.",
-          "Parabéns pelo seu dia, {nome}! Desejamos a você um ano repleto de conquistas e momentos felizes. Conte sempre conosco!",
-          "Felicitações pelo seu aniversário, {nome}! Que este novo ciclo seja marcado por bênçãos e realizações. Um grande abraço!",
-          "{nome}, feliz aniversário! Muita saúde, sucesso e felicidades hoje e sempre!",
-        ]
+        // Load scheduled messages
+        const processedContacts = new Set()
 
-        let successCount = 0
-        let failureCount = 0
-
-        // Send message to each birthday contact
         for (const contact of birthdayContacts) {
-          // Choose a random message template
-          const randomIndex = Math.floor(Math.random() * birthdayMessages.length)
-          let messageToSend = birthdayMessages[randomIndex]
+          // Check for duplicate sends
+          if (processedContacts.has(contact.id)) {
+            console.log(`[AutoSend] Skipping duplicate send to ${contact.nome || contact.id}`)
+            continue
+          }
 
-          // Personalize with first name if available
-          const firstName = contact.nome ? contact.nome.split(" ")[0] : "você" // Default to "você" if name is missing
+          // Primeiro, verificar se há mensagem agendada para este contato
+          const scheduledMessageRef = collection(db, `parabenspravoce/${user.email}/campaigns`)
+          const scheduledQuery = query(scheduledMessageRef, where("contactId", "==", contact.id))
+          const scheduledSnapshot = await getDocs(scheduledQuery)
+
+          let messageToSend
+          let messageSource = "" // Para rastreamento da origem da mensagem
+
+          if (!scheduledSnapshot.empty) {
+            // Use a mensagem agendada
+            const scheduledMessage = scheduledSnapshot.docs[0].data()
+            messageToSend = scheduledMessage.message
+            messageSource = "Scheduled message"
+            console.log(`[AutoSend] Using scheduled message for ${contact.nome || contact.id}`)
+          } else {
+            // Escolha uma mensagem aleatória dos modelos
+            const birthdayMessages = [
+              "Feliz aniversário, {nome}! Que Deus abençoe sua vida com muita saúde, paz e alegria neste novo ano.",
+              "Parabéns pelo seu dia, {nome}! Desejamos a você um ano repleto de conquistas e momentos felizes. Conte sempre conosco!",
+              "Felicitações pelo seu aniversário, {nome}! Que este novo ciclo seja marcado por bênçãos e realizações. Um grande abraço!",
+              "{nome}, feliz aniversário! Muita saúde, sucesso e felicidades hoje e sempre!",
+            ]
+            const randomIndex = Math.floor(Math.random() * birthdayMessages.length)
+            messageToSend = birthdayMessages[randomIndex]
+            messageSource = `Random template #${randomIndex}`
+            console.log(`[AutoSend] Using random template #${randomIndex} for ${contact.nome || contact.id}`)
+          }
+
+          // Adicionar logs detalhados sobre a mensagem
+          console.log(`[AutoSend] Using message: "${messageToSend}"`)
+          console.log(`[AutoSend] Message source: ${messageSource}`)
+
+          // Personalizar com nome
+          const firstName = contact.nome ? contact.nome.split(" ")[0] : "você"
           messageToSend = messageToSend.replace("{nome}", firstName)
 
           if (contact.telefone) {
@@ -1185,15 +1247,11 @@ function CountdownTimer({ targetTime }: { targetTime: string }) {
                   `[AutoSend] ❌ Failed to send to ${contact.nome || contact.id} (${phoneNumber}). Status: ${response.status}`,
                   responseData,
                 )
-                failureCount++
-                // Optionally store failure details somewhere
               } else {
                 console.log(
                   `[AutoSend] ✅ Successfully sent to ${contact.nome || contact.id} (${phoneNumber})`,
                   responseData,
                 )
-                successCount++
-                // Optionally update contact status in Firestore to 'sent_today'
               }
               // Add a small delay between messages to avoid rate limiting issues
               await new Promise((resolve) => setTimeout(resolve, 1500)) // 1.5 second delay
@@ -1202,22 +1260,14 @@ function CountdownTimer({ targetTime }: { targetTime: string }) {
                 `[AutoSend] ❌ Network/fetch error sending to ${contact.nome || contact.id} (${phoneNumber}):`,
                 sendError,
               )
-              failureCount++
             }
+
+            // Add to processed contacts after successful send
+            processedContacts.add(contact.id)
           } else {
             console.warn(`[AutoSend] Skipping contact ${contact.nome || contact.id} due to missing phone number.`)
-            failureCount++ // Count as failure if no phone number
           }
         } // End of loop through contacts
-
-        // Notify user about the outcome
-        if (successCount > 0 || failureCount > 0) {
-          toast({
-            title: "Envio de Mensagens de Aniversário",
-            description: `${successCount} enviada(s) com sucesso, ${failureCount} falha(s).`,
-            variant: failureCount > 0 ? "warning" : "default",
-          })
-        }
       } else {
         console.log("[AutoSend] No contacts found with birthdays today.")
         // Optionally notify user that no birthdays were found
