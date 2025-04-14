@@ -31,19 +31,19 @@ const mensagensIniciais = [
   {
     id: 1,
     titulo: "Mensagem 1",
-    conteudo: "Feliz aniversário! Que Deus abençoe sua vida com muita saúde, paz e alegria neste novo ano de vida.",
+    conteudo: "M1 M1 M1 Feliz aniversário! Que Deus abençoe sua vida com muita saúde, paz e alegria neste novo ano de vida.",
   },
   {
     id: 2,
     titulo: "Mensagem 2",
     conteudo:
-      "Parabéns pelo seu dia! Desejamos a você um ano repleto de conquistas e momentos felizes. Conte sempre conosco!",
+      "M2 M2 M2 Parabéns pelo seu dia! Desejamos a você um ano repleto de conquistas e momentos felizes. Conte sempre conosco!",
   },
   {
     id: 3,
     titulo: "Mensagem 3",
     conteudo:
-      "Felicitações pelo seu aniversário! Que este novo ciclo seja marcado por bênçãos e realizações. Estamos orando por você!",
+      "M3 M3 M3 Felicitações pelo seu aniversário! Que este novo ciclo seja marcado por bênçãos e realizações. Estamos orando por você!",
   },
 ]
 
