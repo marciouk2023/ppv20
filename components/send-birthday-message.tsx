@@ -8,8 +8,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useToast } from "@/hooks/use-toast"
 import { Send, Loader2, Gift } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
-import { sendMessage } from "@/utils/message-sender"
-import { generateMessageId } from "@/utils/message-id-generator" // Import the new utility
+import { collection, query, where, getDocs, Timestamp, doc, setDoc } from "firebase/firestore"
+import { db } from "@/lib/firebase-config"
 
 interface SendBirthdayMessageProps {
   contactId: string
@@ -67,51 +67,117 @@ export function SendBirthdayMessage({
     }
   }
 
+  // Check if a message was already sent to this contact today
+  const checkIfMessageAlreadySent = async (): Promise<boolean> => {
+    if (!user?.email || !contactId) return false
+
+    try {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+
+      const sentMessagesRef = collection(db, "sent_messages")
+      const q = query(
+        sentMessagesRef,
+        where("userEmail", "==", user.email),
+        where("contactId", "==", contactId),
+        where("timestamp", ">=", Timestamp.fromDate(today)),
+        where("status", "in", ["sent", "sending"]),
+      )
+
+      const snapshot = await getDocs(q)
+      return !snapshot.empty
+    } catch (error) {
+      console.error("Error checking if message was already sent:", error)
+      return false
+    }
+  }
+
+  // Record that a message was sent
+  const recordMessageSent = async (messageContent: string): Promise<string> => {
+    if (!user?.email || !contactId) throw new Error("Missing user email or contact ID")
+
+    try {
+      const today = new Date().toISOString().split("T")[0]
+      const recordId = `manual_birthday_${user.email}_${contactId}_${today}`
+
+      await setDoc(doc(db, "sent_messages", recordId), {
+        messageId: recordId,
+        userEmail: user.email,
+        contactId,
+        contactName,
+        phoneNumber: contactPhone,
+        message: messageContent.substring(0, 100) + (messageContent.length > 100 ? "..." : ""),
+        timestamp: Timestamp.now(),
+        status: "sent",
+        type: "manual_birthday",
+        sentBy: "manual",
+      })
+
+      return recordId
+    } catch (error) {
+      console.error("Error recording message sent:", error)
+      throw error
+    }
+  }
+
   // Enviar mensagem
   const handleSendMessage = async () => {
     setIsSending(true)
     setError(null)
 
     try {
+      if (!user?.email) {
+        throw new Error("Você precisa estar logado para enviar mensagens")
+      }
+
+      // Check if a message was already sent today
+      const alreadySent = await checkIfMessageAlreadySent()
+      if (alreadySent) {
+        toast({
+          title: "Mensagem já enviada",
+          description: `Uma mensagem já foi enviada para ${contactName} hoje.`,
+        })
+        if (onSuccess) onSuccess()
+        return
+      }
+
       const finalMessage = replacePlaceholders(getCurrentMessage())
 
-      if (!user?.email || !contactId) {
-        throw new Error("Dados de usuário ou contato ausentes")
+      // Format phone number
+      let chatId = contactPhone.replace(/\D/g, "")
+      if (!chatId.endsWith("@c.us")) {
+        chatId = `${chatId}@c.us`
       }
 
-      // Use the utility function to generate a consistent message ID
-      // Ensure we're using contactId, not phone number, for consistency with the CRON job
-      const messageId = generateMessageId("manual_birthday", user.email, contactId)
-      console.log(`Sending message with ID: ${messageId}`)
+      // Call WhatsApp API
+      const wahaApiUrl = process.env.NEXT_PUBLIC_WAHA_API_URL || "https://api.parabenspravoce.com"
 
-      // Chamar a função sendMessage com o ID único
-      const sendResult = await sendMessage({
-        phoneNumber: contactPhone,
-        message: finalMessage,
-        userEmail: user.email,
-        contactId: contactId,
-        contactName: contactName,
-        sessionName: "default", // Usar sessão padrão ou obter de configurações
-        messageId: messageId, // Usar o ID gerado consistentemente
+      const response = await fetch("/api/whatsapp/send-message", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          phoneNumber: chatId,
+          message: finalMessage,
+          sessionName: "default",
+        }),
       })
 
-      if (sendResult.success) {
-        if (sendResult.duplicated) {
-          toast({
-            title: "Mensagem já enviada",
-            description: `Uma mensagem já foi enviada para ${contactName} hoje.`,
-          })
-        } else {
-          toast({
-            title: "Mensagem enviada!",
-            description: `Mensagem de aniversário enviada para ${contactName}.`,
-          })
-        }
-
-        if (onSuccess) onSuccess()
-      } else {
-        throw new Error(sendResult.message || "Erro desconhecido ao enviar mensagem.")
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || `Erro ${response.status}`)
       }
+
+      // Record the message as sent
+      await recordMessageSent(finalMessage)
+
+      toast({
+        title: "Mensagem enviada!",
+        description: `Mensagem de aniversário enviada para ${contactName}.`,
+      })
+
+      if (onSuccess) onSuccess()
     } catch (err: any) {
       console.error("Erro ao enviar mensagem de aniversário:", err)
       setError(err.message || "Erro desconhecido ao enviar mensagem.")

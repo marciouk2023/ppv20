@@ -1,8 +1,7 @@
 // app/api/cron/check-birthdays/route.ts - FIXED VERSION
 import { NextResponse } from "next/server"
 import { db } from "@/lib/firebase-config"
-import { collection, getDocs, query, where, Timestamp, addDoc } from "firebase/firestore"
-import { generateMessageId } from "@/utils/message-id-generator"
+import { collection, getDocs, query, where, Timestamp, doc, setDoc } from "firebase/firestore"
 import { personalizeMessage } from "@/utils/message-utils"
 
 // Function to get contacts with birthdays today
@@ -95,37 +94,78 @@ async function getBirthdayMessages(userEmail: string): Promise<string[]> {
   }
 }
 
+// Check if a message was already sent to a contact today
+async function wasMessageSentToContactToday(userEmail: string, contactId: string): Promise<boolean> {
+  try {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+
+    // Create a simple ID format that doesn't depend on message content
+    const baseId = `birthday_${userEmail}_${contactId}`
+
+    // Check for ANY message sent to this contact today
+    const sentMessagesRef = collection(db, "sent_messages")
+    const q = query(
+      sentMessagesRef,
+      where("userEmail", "==", userEmail),
+      where("contactId", "==", contactId),
+      where("timestamp", ">=", Timestamp.fromDate(today)),
+      where("status", "in", ["sent", "sending"]),
+    )
+
+    const snapshot = await getDocs(q)
+    return !snapshot.empty
+  } catch (error) {
+    console.error(`[CRON_LOG] Error checking if message was sent to contact today:`, error)
+    return false // Assume no message was sent in case of error
+  }
+}
+
+// Record that a message was sent to a contact today
+async function recordMessageSent(
+  userEmail: string,
+  contactId: string,
+  contactName: string,
+  phoneNumber: string,
+  messageContent: string,
+) {
+  try {
+    const today = new Date().toISOString().split("T")[0]
+    const recordId = `birthday_${userEmail}_${contactId}_${today}`
+
+    // Use setDoc with a specific document ID to avoid duplicates
+    await setDoc(doc(db, "sent_messages", recordId), {
+      messageId: recordId,
+      userEmail,
+      contactId,
+      contactName,
+      phoneNumber,
+      message: messageContent.substring(0, 100) + (messageContent.length > 100 ? "..." : ""),
+      timestamp: Timestamp.now(),
+      status: "sent",
+      type: "birthday",
+      sentBy: "cron",
+    })
+
+    return recordId
+  } catch (error) {
+    console.error(`[CRON_LOG] Error recording message sent:`, error)
+    throw error
+  }
+}
+
 // Simple function to send a message (simplified version for this fix)
 async function sendMessage(options: {
   phoneNumber: string
   message: string
   sessionName: string
-  contactId?: string
-  contactName?: string
+  contactId: string
+  contactName: string
   userEmail: string
-  messageId: string
 }) {
-  const { phoneNumber, message, sessionName, contactId, contactName, userEmail, messageId } = options
+  const { phoneNumber, message, sessionName, contactId, contactName, userEmail } = options
 
   try {
-    // Check for duplicates
-    const sentMessagesRef = collection(db, "sent_messages")
-    const q = query(
-      sentMessagesRef,
-      where("messageId", "==", messageId),
-      where("timestamp", ">=", Timestamp.fromDate(new Date(new Date().toISOString().split("T")[0]))),
-    )
-
-    const existingMessages = await getDocs(q)
-    if (!existingMessages.empty) {
-      return {
-        success: true,
-        message: "Message already sent today",
-        duplicated: true,
-        messageId,
-      }
-    }
-
     // Personalize message if needed
     const finalMessage = contactName ? personalizeMessage(message, contactName, true) : message
 
@@ -134,19 +174,6 @@ async function sendMessage(options: {
     if (!chatId.endsWith("@c.us")) {
       chatId = `${chatId}@c.us`
     }
-
-    // Record the message attempt
-    await addDoc(sentMessagesRef, {
-      messageId,
-      phoneNumber,
-      contactId,
-      contactName,
-      userEmail,
-      message: finalMessage.substring(0, 100) + (finalMessage.length > 100 ? "..." : ""),
-      timestamp: Timestamp.now(),
-      status: "sending",
-      sessionName,
-    })
 
     // Call WhatsApp API
     const wahaApiUrl = process.env.WAHA_API_URL || "https://api.parabenspravoce.com"
@@ -174,12 +201,8 @@ async function sendMessage(options: {
       throw new Error(`WhatsApp API error: ${response.status}`)
     }
 
-    // Update message status
-    await addDoc(sentMessagesRef, {
-      messageId,
-      status: "sent",
-      updatedAt: Timestamp.now(),
-    })
+    // Record the message
+    const messageId = await recordMessageSent(userEmail, contactId, contactName, phoneNumber, finalMessage)
 
     return {
       success: true,
@@ -191,7 +214,6 @@ async function sendMessage(options: {
     return {
       success: false,
       message: error instanceof Error ? error.message : String(error),
-      messageId,
     }
   }
 }
@@ -308,28 +330,15 @@ export async function GET(request: Request) {
         for (const contact of birthdayContacts) {
           totalMessagesAttempted++
 
-          // Generate a unique ID for this birthday message - MUST be consistent for deduplication
-          const messageId = generateMessageId("birthday", userEmail, contact.id)
+          // CRITICAL FIX: Check if ANY message was already sent to this contact today
+          const alreadySent = await wasMessageSentToContactToday(userEmail, contact.id)
 
-          // Check if we already sent a message to this contact today
-          const sentMessagesRef = collection(db, "sent_messages")
-          const q = query(
-            sentMessagesRef,
-            where("messageId", "==", messageId),
-            where("timestamp", ">=", Timestamp.fromDate(new Date(new Date().toISOString().split("T")[0]))),
-            where("status", "in", ["sent", "sending"]),
-          )
-
-          const existingMessages = await getDocs(q)
-          if (!existingMessages.empty) {
-            console.log(
-              `[CRON] ⏭️ Message for ${contact.nome} (${userEmail}) already sent today. Skipping. ID: ${messageId}`,
-            )
+          if (alreadySent) {
+            console.log(`[CRON] ⏭️ Message for ${contact.nome} (${userEmail}) already sent today. Skipping.`)
             results.push({
               user: userEmail,
               contact: contact.nome,
               status: "skipped_duplicate",
-              messageId: messageId,
             })
             continue // Skip to next contact
           }
@@ -338,7 +347,7 @@ export async function GET(request: Request) {
           const randomIndex = Math.floor(Math.random() * birthdayMessages.length)
           const messageTemplate = birthdayMessages[randomIndex]
 
-          // Call the sendMessage function with the unique ID
+          // Call the sendMessage function
           const sendResult = await sendMessage({
             phoneNumber: contact.telefone,
             message: messageTemplate,
@@ -346,24 +355,16 @@ export async function GET(request: Request) {
             contactId: contact.id,
             contactName: contact.nome,
             userEmail: userEmail,
-            messageId: messageId,
           })
 
           if (sendResult.success) {
-            if (!sendResult.duplicated) {
-              // Count only if not duplicated
-              totalMessagesSent++
-              console.log(`[CRON] ✅ Message sent to ${contact.nome} (${userEmail}). ID: ${sendResult.messageId}`)
-            } else {
-              console.log(
-                `[CRON] ⏭️ Message for ${contact.nome} (${userEmail}) already sent today (deduplicated). ID: ${sendResult.messageId}`,
-              )
-            }
+            totalMessagesSent++
+            console.log(`[CRON] ✅ Message sent to ${contact.nome} (${userEmail}).`)
 
             results.push({
               user: userEmail,
               contact: contact.nome,
-              status: sendResult.duplicated ? "duplicated" : "success",
+              status: "success",
               messageId: sendResult.messageId,
             })
           } else {
@@ -372,12 +373,9 @@ export async function GET(request: Request) {
               contact: contact.nome,
               status: "error_send",
               error: sendResult.message,
-              messageId: sendResult.messageId,
             })
 
-            console.error(
-              `[CRON] ❌ Failed to send to ${contact.nome} (${userEmail}): ${sendResult.message}. ID: ${sendResult.messageId}`,
-            )
+            console.error(`[CRON] ❌ Failed to send to ${contact.nome} (${userEmail}): ${sendResult.message}.`)
           }
         } // End contact loop
       } catch (userError) {
