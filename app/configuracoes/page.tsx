@@ -721,7 +721,7 @@ export default function ConfiguracoesPage() {
                         <AlertTitle className="text-yellow-800 text-sm">Desconexão</AlertTitle>
                         <AlertDescription className="text-yellow-700 text-xs">
                           Para usar outra conta ou reconectar, primeiro desconecte este aparelho em: WhatsApp &gt;
-                          Configurações &gt; Aparelhos Conectados.
+                          Configurações &gt; Aparelhos Conectados &gt; Aparelhos Conectados.
                         </AlertDescription>
                       </Alert>
                       {/* Optional: Add a disconnect button here if needed */}
@@ -735,7 +735,7 @@ export default function ConfiguracoesPage() {
                         <>
                           <div className="mb-4 p-1 border bg-white shadow-md">
                             <img
-                              src={qrCode} // Assumes qrCode is a data URI (e.g., 'data:image/png;base64,...')
+                              src={qrCode || "/placeholder.svg"} // Assumes qrCode is a data URI (e.g., 'data:image/png;base64,...')
                               alt="QR Code WhatsApp"
                               className="w-56 h-56 sm:w-64 sm:h-64 object-contain"
                             />
@@ -1033,11 +1033,24 @@ function CountdownTimer({ targetTime }: { targetTime: string }) {
   // Function to check birthdays and send messages (now separate from interval calculation)
   const checkAndSendBirthdayMessages = async () => {
     if (!user?.email) {
-      console.log("[AutoSend] No user logged in. Skipping birthday check.")
+      console.log("[AutoSend] Nenhum usuário logado. Pulando verificação de aniversário.")
       return
     }
 
-    console.log("[AutoSend] Checking birthdays for today...")
+    // NOVO: Verificar se já executou recentemente
+    const lastExecutionTime = localStorage.getItem("lastBirthdayCheckTime")
+    const now = Date.now()
+
+    if (lastExecutionTime && now - Number.parseInt(lastExecutionTime) < 60000) {
+      // 60 segundos
+      console.log("[AutoSend] Verificação de aniversário já executada nos últimos 60 segundos. Ignorando.")
+      return
+    }
+
+    // Registrar esta execução
+    localStorage.setItem("lastBirthdayCheckTime", now.toString())
+
+    console.log("[AutoSend] Verificando aniversários para hoje...")
 
     try {
       // Get the current user's active WhatsApp session

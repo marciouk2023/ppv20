@@ -1,7 +1,7 @@
 // app/api/cron/check-birthdays/route.ts
 import { NextResponse } from "next/server"
 import { db } from "@/lib/firebase-config"
-import { collection, getDocs, query, where, doc, getDoc, updateDoc, Timestamp } from "firebase/firestore"
+import { collection, getDocs, query, where, doc, Timestamp } from "firebase/firestore"
 
 // Função auxiliar para buscar contatos aniversariantes
 async function getUserBirthdayContacts(userEmail: string, currentDay: number, currentMonth: number) {
@@ -53,48 +53,48 @@ async function getUserBirthdayContacts(userEmail: string, currentDay: number, cu
   return birthdayContacts
 }
 
-// Função para verificar se a mensagem já foi enviada hoje para o contato
-async function checkIfMessageSentToday(userEmail: string, contactId: string) {
+// Função para verificar e marcar mensagem como enviada em uma única transação atômica
+async function checkAndMarkMessageSent(userEmail: string, contactId: string): Promise<boolean> {
   try {
-    const contactRef = doc(db, `parabenspravoce/${userEmail}/users`, contactId)
-    const contactDoc = await getDoc(contactRef)
+    // Usar transação do Firestore para operações atômicas
+    return await db.runTransaction(async (transaction) => {
+      const contactRef = doc(db, `parabenspravoce/${userEmail}/users`, contactId)
+      const contactDoc = await transaction.get(contactRef)
 
-    if (contactDoc.exists()) {
+      if (!contactDoc.exists()) {
+        console.log(`[CRON] Contato ${contactId} não encontrado`)
+        return false
+      }
+
       const contactData = contactDoc.data()
 
-      // Verificar se existe registro de envio hoje
+      // Verificar se já enviou hoje
       if (contactData.lastBirthdayMessageSent) {
         const lastSent = contactData.lastBirthdayMessageSent.toDate()
         const today = new Date()
 
         // Verificar se a data de envio é hoje
-        return (
+        if (
           lastSent.getDate() === today.getDate() &&
           lastSent.getMonth() === today.getMonth() &&
           lastSent.getFullYear() === today.getFullYear()
-        )
+        ) {
+          console.log(`[CRON] Mensagem já enviada hoje para ${contactId}`)
+          return false // Já enviou hoje
+        }
       }
-    }
 
-    return false
-  } catch (error) {
-    console.error(`[CRON] Erro ao verificar envio anterior para ${contactId}:`, error)
-    return false
-  }
-}
+      // Se não enviou hoje, marcar como enviado na mesma transação
+      transaction.update(contactRef, {
+        lastBirthdayMessageSent: Timestamp.now(),
+        birthdayMessageSentThisYear: true,
+      })
 
-// Função para marcar mensagem como enviada hoje
-async function markMessageAsSentToday(userEmail: string, contactId: string) {
-  try {
-    const contactRef = doc(db, `parabenspravoce/${userEmail}/users`, contactId)
-    await updateDoc(contactRef, {
-      lastBirthdayMessageSent: Timestamp.now(),
-      birthdayMessageSentThisYear: true,
+      console.log(`[CRON] Marcando envio de mensagem para ${contactId} (transação)`)
+      return true // Pode enviar
     })
-    console.log(`[CRON] Marcado envio de mensagem para ${contactId}`)
-    return true
   } catch (error) {
-    console.error(`[CRON] Erro ao marcar mensagem como enviada para ${contactId}:`, error)
+    console.error(`[CRON] Erro na transação para ${contactId}:`, error)
     return false
   }
 }
@@ -134,7 +134,11 @@ async function sendWhatsAppMessage(
   message: string,
   userEmail: string,
 ) {
-  console.log(`[CRON] Tentando enviar para ${contact.nome} (${contact.telefone}) do usuário ${userEmail}`)
+  const messageId = `birthday_${userEmail}_${contact.id}_${new Date().toISOString().split("T")[0]}`
+
+  console.log(
+    `[CRON] Tentando enviar para ${contact.nome} (${contact.telefone}) do usuário ${userEmail} com ID: ${messageId}`,
+  )
   const response = await fetch(apiUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -142,6 +146,7 @@ async function sendWhatsAppMessage(
       phoneNumber: contact.telefone,
       message: message,
       userEmail: userEmail,
+      messageId: messageId, // Adicionar ID único para deduplicação
     }),
   })
 
@@ -280,21 +285,24 @@ export async function GET(request: Request) {
         }
 
         for (const contact of birthdayContacts) {
-          // Verificar se já enviou mensagem hoje para este contato
-          const alreadySentToday = await checkIfMessageSentToday(userEmail, contact.id)
+          // Usar a nova função de transação para verificar e marcar como enviado atomicamente
+          const canSendMessage = await checkAndMarkMessageSent(userEmail, contact.id)
 
-          if (alreadySentToday) {
-            console.log(`[CRON] Mensagem já enviada hoje para ${contact.nome}. Pulando.`)
+          if (!canSendMessage) {
+            console.log(`[CRON] Pulando envio para ${contact.nome} - já enviado hoje ou erro na transação`)
             results.push({
               user: userEmail,
               contact: contact.nome,
               status: "skipped",
-              error: "Mensagem já enviada hoje",
+              error: "Mensagem já enviada hoje ou erro na transação",
             })
             continue
           }
 
           totalMessagesAttempted++
+
+          // Gerar ID único para esta mensagem específica (para deduplicação)
+          const messageId = `birthday_${userEmail}_${contact.id}_${new Date().toISOString().split("T")[0]}`
 
           // [Passo 1] Verificar se existe uma mensagem personalizada agendada
           const campaignsRef = collection(db, `parabenspravoce/${userEmail}/campaigns`)
@@ -320,7 +328,6 @@ export async function GET(request: Request) {
             if (sendResult.success) {
               totalMessagesSent++
               results.push({ user: userEmail, contact: contact.nome, status: "success" })
-              await markMessageAsSentToday(userEmail, contact.id)
               messageSent = true
             } else {
               results.push({
@@ -348,7 +355,6 @@ export async function GET(request: Request) {
             if (sendResult.success) {
               totalMessagesSent++
               results.push({ user: userEmail, contact: contact.nome, status: "success" })
-              await markMessageAsSentToday(userEmail, contact.id)
             } else {
               results.push({
                 user: userEmail,
