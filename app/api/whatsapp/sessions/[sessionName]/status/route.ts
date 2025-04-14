@@ -1,4 +1,4 @@
-// Caminho: app/api/sessions/[sessionName]/status/route.ts
+// Caminho: app/api/whatsapp/sessions/[sessionName]/status/route.ts
 
 import { type NextRequest, NextResponse } from "next/server"
 import https from "https"

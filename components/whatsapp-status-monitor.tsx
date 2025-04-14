@@ -45,7 +45,7 @@ export function WhatsAppStatusMonitor() {
       }
 
       // Verificar status da sessão
-      const response = await fetch(`/api/sessions/${sessionInfo.sessionName}/status`, {
+      const response = await fetch(`/api/whatsapp/sessions/${sessionInfo.sessionName}/status`, {
         cache: "no-store",
       })
 

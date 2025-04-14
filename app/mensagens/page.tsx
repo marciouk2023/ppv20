@@ -191,7 +191,7 @@ export default function MensagensPage() {
       // Use the local API endpoint instead of direct WAHA API
       console.log(`[Frontend] Enviando mensagem via API local`)
 
-      const response = await fetch("/api/messages/send", {
+      const response = await fetch("/api/whatsapp/send-message", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

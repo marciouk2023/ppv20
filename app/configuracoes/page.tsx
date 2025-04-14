@@ -49,7 +49,7 @@ function ConnectionStatusBadge({
         if (userSession.hasSession && userSession.sessionName) {
           // If the user has a session, check the status of that specific session
           try {
-            const sessionEndpoint = `/api/sessions/${userSession.sessionName}/status`
+            const sessionEndpoint = `/api/whatsapp/sessions/${userSession.sessionName}/status`
             const response = await fetch(sessionEndpoint, {
               cache: "no-store", // Ensure fresh data
             })
@@ -261,7 +261,7 @@ export default function ConfiguracoesPage() {
       ) {
         // If Firestore indicates an active session, verify with the API
         try {
-          const response = await fetch(`/api/sessions/${sessionInfo.sessionName}/status`, {
+          const response = await fetch(`/api/whatsapp/sessions/${sessionInfo.sessionName}/status`, {
             cache: "no-store",
           })
           if (response.ok) {
@@ -380,8 +380,8 @@ export default function ConfiguracoesPage() {
       setSessionName(tempSessionName) // Update UI state with the new name
       console.log(`[Frontend] Starting QR flow for session: ${tempSessionName}`)
 
-      console.log(`[Frontend] -> Calling Local API: POST /api/sessions`)
-      const createResponse = await fetch("/api/sessions", {
+      console.log(`[Frontend] -> Calling Local API: POST /api/whatsapp/sessions`)
+      const createResponse = await fetch("/api/whatsapp/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -412,8 +412,8 @@ export default function ConfiguracoesPage() {
 
       // --- 3. (Optional) Screenshot - Attempt but don't fail the flow if it errors ---
       try {
-        console.log(`[Frontend] -> Calling Local API: GET /api/sessions/${tempSessionName}/screenshot`)
-        const screenshotResponse = await fetch(`/api/sessions/${tempSessionName}/screenshot`, {
+        console.log(`[Frontend] -> Calling Local API: GET /api/whatsapp/sessions/${tempSessionName}/screenshot`)
+        const screenshotResponse = await fetch(`/api/whatsapp/sessions/${tempSessionName}/screenshot`, {
           cache: "no-store",
         })
         if (!screenshotResponse.ok) {
@@ -430,8 +430,8 @@ export default function ConfiguracoesPage() {
       await new Promise((resolve) => setTimeout(resolve, 5000)) // Reduced delay to 5 seconds
 
       // --- 5. Fetch QR Code ---
-      console.log(`[Frontend] -> Calling Local API: GET /api/sessions/${tempSessionName}/qrcode`)
-      const qrResponse = await fetch(`/api/sessions/${tempSessionName}/qrcode`, { cache: "no-store" })
+      console.log(`[Frontend] -> Calling Local API: GET /api/whatsapp/sessions/${tempSessionName}/auth/qr`)
+      const qrResponse = await fetch(`/api/whatsapp/sessions/${tempSessionName}/auth/qr`, { cache: "no-store" })
 
       // Check if the response is JSON before parsing
       const contentType = qrResponse.headers.get("content-type")
@@ -462,7 +462,7 @@ export default function ConfiguracoesPage() {
           )
           // Attempt to check the *actual* status
           try {
-            const statusCheckResponse = await fetch(`/api/sessions/${tempSessionName}/status`, {
+            const statusCheckResponse = await fetch(`/api/whatsapp/sessions/${tempSessionName}/status`, {
               cache: "no-store",
             })
             if (statusCheckResponse.ok) {
@@ -587,9 +587,9 @@ export default function ConfiguracoesPage() {
 
       try {
         console.log(
-          `[StatusCheck] Attempt ${attemptCount}/${maxAttempts} -> GET /api/sessions/${sessionNameToCheck}/status`,
+          `[StatusCheck] Attempt ${attemptCount}/${maxAttempts} -> GET /api/whatsapp/sessions/${sessionNameToCheck}/status`,
         )
-        const statusResponse = await fetch(`/api/sessions/${sessionNameToCheck}/status`, { cache: "no-store" })
+        const statusResponse = await fetch(`/api/whatsapp/sessions/${sessionNameToCheck}/status`, { cache: "no-store" })
 
         // Check for non-JSON response first
         const contentType = statusResponse.headers.get("content-type")
@@ -735,7 +735,7 @@ export default function ConfiguracoesPage() {
                         <>
                           <div className="mb-4 p-1 border bg-white shadow-md">
                             <img
-                              src={qrCode || "/placeholder.svg"} // Assumes qrCode is a data URI (e.g., 'data:image/png;base64,...')
+                              src={qrCode} // Assumes qrCode is a data URI (e.g., 'data:image/png;base64,...')
                               alt="QR Code WhatsApp"
                               className="w-56 h-56 sm:w-64 sm:h-64 object-contain"
                             />

@@ -1,7 +1,7 @@
 // app/api/cron/check-birthdays/route.ts
 import { NextResponse } from "next/server"
 import { db } from "@/lib/firebase-config" // Verifique se o caminho está correto
-import { collection, getDocs } from "firebase/firestore"
+import { collection, getDocs, query, where } from "firebase/firestore"
 
 // REMOVIDO: export const dynamic = "force_dynamic"; // Linha removida para evitar aviso
 
@@ -9,7 +9,7 @@ import { collection, getDocs } from "firebase/firestore"
 async function getUserBirthdayContacts(userEmail: string, currentDay: number, currentMonth: number) {
   const contactsRef = collection(db, `parabenspravoce/${userEmail}/users`)
   const snapshot = await getDocs(contactsRef)
-  const birthdayContacts: Array<{ id: string; nome: string; telefone: string }> = []
+  const birthdayContacts: Array<{ id: string; nome: string; telefone: string; data_de_nascimento: string }> = []
 
   snapshot.docs.forEach((doc) => {
     const contact = doc.data()
@@ -47,6 +47,7 @@ async function getUserBirthdayContacts(userEmail: string, currentDay: number, cu
           id: doc.id,
           nome: contact.nome || "Aniversariante",
           telefone: contact.telefone,
+          data_de_nascimento: contact.data_de_nascimento,
         })
       }
     } catch (e) {
@@ -62,7 +63,7 @@ async function getUserBirthdayContacts(userEmail: string, currentDay: number, cu
 // Função auxiliar para enviar mensagem (para organizar melhor)
 async function sendWhatsAppMessage(
   apiUrl: string,
-  contact: { id: string; nome: string; telefone: string },
+  contact: { id: string; nome: string; telefone: string; data_de_nascimento: string },
   message: string,
   userEmail: string,
 ) {
@@ -140,14 +141,14 @@ export async function GET(request: Request) {
   let sendMessageApiUrl: string
   try {
     // Tenta construir a URL relativa à requisição atual (funciona bem na Vercel)
-    sendMessageApiUrl = new URL("/api/whatsapp/send-message", request.url).toString()
+    sendMessageApiUrl = new URL("/api/messages/send", request.url).toString()
   } catch (urlError) {
     // Se falhar (ex: rodando localmente sem contexto de URL completo), use uma URL absoluta fixa
     // !! IMPORTANTE: Substitua pela sua URL de deploy se necessário !!
     console.warn("[CRON] Falha ao construir URL relativa, usando URL absoluta fallback.")
     sendMessageApiUrl = process.env.NEXT_PUBLIC_BASE_URL // Tenta usar uma variável de ambiente
-      ? `${process.env.NEXT_PUBLIC_BASE_URL}/api/whatsapp/send-message`
-      : "https://v0-whatsapp-qr-code-bot-hoaqep.vercel.app/api/whatsapp/send-message" // Fallback final para URL conhecida
+      ? `${process.env.NEXT_PUBLIC_BASE_URL}/api/messages/send`
+      : "https://v0-whatsapp-qr-code-bot-hoaqep.vercel.app/api/messages/send" // Fallback final para URL conhecida
   }
   console.log(`[CRON] Usando URL para envio de mensagem: ${sendMessageApiUrl}`)
 
@@ -228,25 +229,51 @@ export async function GET(request: Request) {
 
         for (const contact of birthdayContacts) {
           totalMessagesAttempted++
-          const randomIndex = Math.floor(Math.random() * birthdayMessages.length)
-          let message = birthdayMessages[randomIndex]
-          // Tenta pegar o primeiro nome, mas garante que não falhe se 'nome' for vazio
-          const firstName = contact.nome && typeof contact.nome === "string" ? contact.nome.split(" ")[0] : "você"
-          message = message.replace(/{nome}/g, firstName) // Substitui {nome}
 
-          // Chama a função de envio e trata o resultado dela
-          const sendResult = await sendWhatsAppMessage(sendMessageApiUrl, contact, message, userEmail)
-          if (sendResult.success) {
-            totalMessagesSent++
-            results.push({ user: userEmail, contact: contact.nome, status: "success" })
+          // [Passo 1] Verificar se existe uma mensagem personalizada agendada na aba "Mensagens Agendadas".
+          const campaignsRef = collection(db, `parabenspravoce/${userEmail}/campaigns`)
+          const q = query(campaignsRef, where("contactId", "==", contact.id), where("status", "==", "scheduled"))
+          const snapshot = await getDocs(q)
+
+          if (!snapshot.empty) {
+            // Se SIM: Enviar apenas essa mensagem.
+            const campaign = snapshot.docs[0].data()
+            console.log(`[CRON] Encontrada mensagem personalizada para ${contact.nome}. Enviando...`)
+            const sendResult = await sendWhatsAppMessage(sendMessageApiUrl, contact, campaign.message, userEmail)
+            if (sendResult.success) {
+              totalMessagesSent++
+              results.push({ user: userEmail, contact: contact.nome, status: "success" })
+            } else {
+              results.push({
+                user: userEmail,
+                contact: contact.nome,
+                status: "error",
+                error: sendResult.error || "Erro desconhecido ao enviar mensagem personalizada",
+              })
+            }
           } else {
-            // Usa o erro retornado pela função sendWhatsAppMessage
-            results.push({
-              user: userEmail,
-              contact: contact.nome,
-              status: "error",
-              error: sendResult.error || "Erro desconhecido ao enviar mensagem",
-            })
+            // Se NÃO: Buscar uma mensagem aleatória e enviar apenas uma.
+            const randomIndex = Math.floor(Math.random() * birthdayMessages.length)
+            let message = birthdayMessages[randomIndex]
+            // Tenta pegar o primeiro nome, mas garante que não falhe se 'nome' for vazio
+            const firstName = contact.nome && typeof contact.nome === "string" ? contact.nome.split(" ")[0] : "você"
+            message = message.replace(/{nome}/g, firstName) // Substitui {nome}
+
+            console.log(
+              `[CRON] Nenhuma mensagem personalizada encontrada para ${contact.nome}. Enviando mensagem aleatória...`,
+            )
+            const sendResult = await sendWhatsAppMessage(sendMessageApiUrl, contact, message, userEmail)
+            if (sendResult.success) {
+              totalMessagesSent++
+              results.push({ user: userEmail, contact: contact.nome, status: "success" })
+            } else {
+              results.push({
+                user: userEmail,
+                contact: contact.nome,
+                status: "error",
+                error: sendResult.error || "Erro desconhecido ao enviar mensagem aleatória",
+              })
+            }
           }
         }
       } catch (userProcessingError) {

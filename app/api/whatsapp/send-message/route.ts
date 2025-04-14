@@ -1,4 +1,4 @@
-// Caminho: app/api/messages/send/route.ts
+// Caminho: app/api/whatsapp/send-message/route.ts
 
 import { type NextRequest, NextResponse } from "next/server"
 import https from "https"
