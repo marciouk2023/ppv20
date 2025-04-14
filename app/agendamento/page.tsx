@@ -519,4 +519,6 @@ export default function AgendamentoPage() {
                                            <div
                                              className={`h-full w-full flex items-center justify-center bg-orange-200 text-orange-600`}
                                            >
-                                             <span className="text-\
+                                             <span className="text-orange-600 font-medium">
+  {contact.nome.charAt(0).toUpperCase()}
+</span>
