@@ -9,7 +9,7 @@ export async function enviarAudio(phone: string, audioUrl: string, userEmail: st
   try {
     console.log(`[Frontend] Sending audio to ${phone} via user ${userEmail}`)
 
-    const response = await fetch("/api/whatsapp/send-audio-direct", {
+    const response = await fetch("/api/messages/send-audio", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -47,7 +47,7 @@ export async function enviarMensagem(phone: string, message: string, userEmail: 
   try {
     console.log(`[Frontend] Sending message to ${phone} via user ${userEmail}`)
 
-    const response = await fetch("/api/whatsapp/send-message", {
+    const response = await fetch("/api/messages/send", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

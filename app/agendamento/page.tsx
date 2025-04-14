@@ -493,7 +493,7 @@ export default function AgendamentoPage() {
             : "Feliz Aniversário!"
 
           // Send message using WhatsApp API
-          const response = await fetch("/api/whatsapp/send-message", {
+          const response = await fetch("/api/messages/send", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
