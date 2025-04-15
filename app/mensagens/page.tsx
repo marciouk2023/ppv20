@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Edit, Send, Loader2, MessageSquare, Mic, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -23,8 +23,6 @@ import { useAuth } from "@/contexts/auth-context"
 import { useRouter } from "next/navigation"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { checkUserSession } from "@/lib/session-manager" // Certifique-se que o caminho está correto
-import { db } from "@/lib/firebase"
-import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore"
 
 // Sample data for messages
 const mensagensIniciais = [
@@ -61,7 +59,6 @@ export default function MensagensPage() {
   const [editingMessage, setEditingMessage] = useState<any>(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [editedContent, setEditedContent] = useState("")
-  const [isSavingMessage, setIsSavingMessage] = useState(false)
 
   const handleEditMessage = (mensagem: any) => {
     setEditingMessage(mensagem)
@@ -69,81 +66,14 @@ export default function MensagensPage() {
     setIsEditModalOpen(true)
   }
 
-  // Function to load message templates from Firebase
-  const loadMessageTemplates = async () => {
-    if (!user?.email) return
-
-    try {
-      const templatesDocRef = doc(db, `parabenspravoce/${user.email}/settings`, "messageTemplates")
-      const templatesDoc = await getDoc(templatesDocRef)
-
-      if (templatesDoc.exists()) {
-        const data = templatesDoc.data()
-        if (data.templates && Array.isArray(data.templates)) {
-          setMensagens(data.templates)
-        } else {
-          // If templates array doesn't exist, save the default templates
-          await setDoc(templatesDocRef, {
-            templates: mensagens,
-            updatedAt: Timestamp.now(),
-          })
-        }
-      } else {
-        // If document doesn't exist, create it with default templates
-        await setDoc(templatesDocRef, {
-          templates: mensagens,
-          updatedAt: Timestamp.now(),
-        })
-      }
-    } catch (error) {
-      console.error("Error loading message templates:", error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar os modelos de mensagem.",
-        variant: "destructive",
-      })
-    }
-  }
-
-  // Function to save edited message
-  const handleSaveMessage = async () => {
+  const handleSaveMessage = () => {
     if (!editingMessage) return
-
-    try {
-      setIsSavingMessage(true)
-
-      // Update local state
-      const updatedMessages = mensagens.map((msg) =>
-        msg.id === editingMessage.id ? { ...msg, conteudo: editedContent } : msg,
-      )
-
-      setMensagens(updatedMessages)
-
-      // Save to Firebase
-      if (user?.email) {
-        const templatesDocRef = doc(db, `parabenspravoce/${user.email}/settings`, "messageTemplates")
-        await setDoc(templatesDocRef, {
-          templates: updatedMessages,
-          updatedAt: Timestamp.now(),
-        })
-
-        toast({
-          title: "Mensagem salva",
-          description: "Seu modelo de mensagem foi salvo com sucesso no Firebase.",
-        })
-      }
-
-      setIsEditModalOpen(false)
-    } catch (error) {
-      console.error("Error saving message template:", error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível salvar o modelo de mensagem.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSavingMessage(false)
-    }
+    setMensagens(mensagens.map((msg) => (msg.id === editingMessage.id ? { ...msg, conteudo: editedContent } : msg)))
+    setIsEditModalOpen(false)
+    toast({
+      title: "Mensagem atualizada",
+      description: "Seu modelo de mensagem foi atualizado com sucesso!",
+    })
   }
 
   // --- FUNÇÃO handleSendMessage COM CORREÇÃO DE URL ---
@@ -278,13 +208,6 @@ export default function MensagensPage() {
   const goToConfigPage = () => {
     router.push("/configuracoes")
   }
-
-  // Load contacts when component mounts
-  useEffect(() => {
-    if (user?.email) {
-      loadMessageTemplates() // Add this line to load message templates
-    }
-  }, [user])
 
   return (
     <div className="flex min-h-screen bg-[#f8f7f2]">
@@ -505,15 +428,8 @@ export default function MensagensPage() {
             <Button variant="outline" onClick={() => setIsEditModalOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSaveMessage} className="bg-green-500 hover:bg-green-600" disabled={isSavingMessage}>
-              {isSavingMessage ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Salvando...
-                </>
-              ) : (
-                "Salvar Alterações"
-              )}
+            <Button onClick={handleSaveMessage} className="bg-green-500 hover:bg-green-600">
+              Salvar Alterações
             </Button>
           </DialogFooter>
         </DialogContent>
