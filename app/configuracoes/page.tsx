@@ -568,7 +568,8 @@ export default function ConfiguracoesPage() {
                         <AlertTitle className="text-yellow-800 text-sm">Desconexão</AlertTitle>
                         <AlertDescription className="text-yellow-700 text-xs">
                           Para usar outra conta ou reconectar, primeiro desconecte este aparelho em: WhatsApp &gt;
-                          Configurações &gt; Aparelhos Conectados. A seguir, clique em "Gerar QR Code".
+                          Configurações &gt; Aparelhos Conectados &gt; Aparelhos Conectados. A seguir, clique em "Gerar
+                          QR Code".
                         </AlertDescription>
                       </Alert>
                       {/* Re-enable QR generation button */}
