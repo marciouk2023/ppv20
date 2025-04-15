@@ -3,6 +3,8 @@
 import { Sidebar } from "@/components/sidebar"
 import { UserProfile } from "@/components/user-profile"
 import { WhatsAppStatusMonitor } from "@/components/whatsapp-status-monitor"
+import { MessageTemplates } from "@/components/message-templates"
+import { ContactImportExport } from "@/components/contact-import-export"
 
 export default function PerfilPage() {
   return (
@@ -19,6 +21,11 @@ export default function PerfilPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             <UserProfile />
             <WhatsAppStatusMonitor />
+          </div>
+
+          <div className="space-y-6">
+            <MessageTemplates />
+            <ContactImportExport />
           </div>
         </div>
       </div>

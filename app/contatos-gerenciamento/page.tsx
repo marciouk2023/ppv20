@@ -33,8 +33,6 @@ interface Contact {
   nome: string
   telefone: string
   data_de_nascimento: string
-  grupo?: string
-  diasParaAniversario?: number
 }
 
 // Form data interface
@@ -70,7 +68,6 @@ export default function ContactManagementPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [isUploading, setIsUploading] = useState(false)
   const [activeTab, setActiveTab] = useState("todos")
-  const [availableGroups, setAvailableGroups] = useState<string[]>(["Geral"])
 
   // Hooks
   const { user } = useAuth()
@@ -111,41 +108,32 @@ export default function ContactManagementPage() {
   const loadContacts = async () => {
     if (!user?.email) return
 
+    setLoading(true)
     try {
-      setLoading(true)
-      // Use the correct path structure with user email to ensure data isolation
+      // Create the collection reference with the correct path
       const contactsRef = collection(db, `parabenspravoce/${user.email}/users`)
+
+      // Query the collection, ordered by name
       const q = query(contactsRef, orderBy("nome"))
       const snapshot = await getDocs(q)
 
-      const loadedContacts = snapshot.docs.map((doc) => {
-        const data = doc.data()
-        return {
-          id: doc.id,
-          nome: data.nome || "",
-          telefone: data.telefone || "",
-          data_de_nascimento: data.data_de_nascimento || "",
-          imagem: data.imagem || "",
-          grupo: data.grupo || "Geral",
-        }
-      }) as Contact[]
+      // Map the documents to our Contact interface
+      const loadedContacts = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Contact[]
 
-      // Calculate days until birthday for each contact
-      const contactsWithDays = loadedContacts.map((contact) => ({
-        ...contact,
-        diasParaAniversario: calcularDiasParaAniversario(contact.data_de_nascimento),
-      }))
+      setContacts(loadedContacts)
 
-      setContacts(contactsWithDays)
-
-      // Extract unique groups
-      const groups = Array.from(new Set(loadedContacts.map((contact) => contact.grupo || "Geral")))
-      setAvailableGroups(groups)
+      toast({
+        title: "Contatos carregados",
+        description: `${loadedContacts.length} contatos encontrados.`,
+      })
     } catch (error) {
       console.error("Error loading contacts:", error)
       toast({
-        title: "Erro",
-        description: "Não foi possível carregar os contatos do Firebase.",
+        title: "Erro ao carregar contatos",
+        description: "Ocorreu um erro ao carregar seus contatos. Por favor, tente novamente.",
         variant: "destructive",
       })
     } finally {
@@ -309,13 +297,13 @@ export default function ContactManagementPage() {
 
       toast({
         title: "Contato atualizado",
-        description: "O contato foi atualizado com sucesso no Firebase.",
+        description: "O contato foi atualizado com sucesso.",
       })
     } catch (error) {
       console.error("Error updating contact:", error)
       toast({
         title: "Erro ao atualizar contato",
-        description: "Ocorreu um erro ao atualizar o contato no Firebase. Tente novamente.",
+        description: "Ocorreu um erro ao atualizar o contato. Por favor, tente novamente.",
         variant: "destructive",
       })
     }
@@ -341,13 +329,13 @@ export default function ContactManagementPage() {
 
       toast({
         title: "Contato excluído",
-        description: "O contato foi excluído com sucesso do Firebase.",
+        description: "O contato foi excluído com sucesso.",
       })
     } catch (error) {
       console.error("Error deleting contact:", error)
       toast({
         title: "Erro ao excluir contato",
-        description: "Ocorreu um erro ao excluir o contato do Firebase. Tente novamente.",
+        description: "Ocorreu um erro ao excluir o contato. Por favor, tente novamente.",
         variant: "destructive",
       })
     }
@@ -411,20 +399,6 @@ export default function ContactManagementPage() {
       // Otherwise sort by name
       return a.nome.localeCompare(b.nome)
     })
-
-  // Function to calculate days until the next birthday
-  const calcularDiasParaAniversario = (dataNascimento: string): number => {
-    const dataNascimentoObj = new Date(dataNascimento)
-    const hoje = new Date()
-    const proximoAniversario = new Date(hoje.getFullYear(), dataNascimentoObj.getMonth(), dataNascimentoObj.getDate())
-
-    if (hoje > proximoAniversario) {
-      proximoAniversario.setFullYear(hoje.getFullYear() + 1)
-    }
-
-    const diff = proximoAniversario.getTime() - hoje.getTime()
-    return Math.ceil(diff / (1000 * 3600 * 24))
-  }
 
   // If user is not authenticated, show loading state
   if (!user) {

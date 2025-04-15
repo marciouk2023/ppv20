@@ -230,42 +230,25 @@ export function ContactBirthdayCard() {
               {contacts
                 .filter(
                   (c) =>
-                    c.diasParaAniversario !== undefined &&
-                    ((c.diasParaAniversario <= 30 && c.diasParaAniversario > 7) || c.diasParaAniversario === 0),
+                    c.diasParaAniversario !== undefined && c.diasParaAniversario <= 30 && c.diasParaAniversario > 7,
                 )
                 .sort((a, b) => (a.diasParaAniversario || 0) - (b.diasParaAniversario || 0))
                 .slice(0, 5)
                 .map((contact) => (
                   <div
                     key={contact.id}
-                    className={`flex items-center justify-between p-2 border-b last:border-b-0 hover:bg-gray-50 rounded-md ${
-                      contact.diasParaAniversario === 0 ? "bg-green-50 border border-green-200" : ""
-                    }`}
+                    className="flex items-center justify-between p-2 border-b last:border-b-0 hover:bg-gray-50 rounded-md"
                   >
                     <div className="flex items-center gap-3">
-                      <div
-                        className={`h-10 w-10 rounded-full ${
-                          contact.diasParaAniversario === 0
-                            ? "bg-green-100 text-green-600"
-                            : "bg-blue-100 text-blue-600"
-                        } flex items-center justify-center flex-shrink-0`}
-                      >
-                        {contact.diasParaAniversario === 0 ? (
-                          <Gift className="h-5 w-5" />
-                        ) : (
-                          <span className="text-sm font-medium">{contact.nome.charAt(0).toUpperCase()}</span>
-                        )}
+                      <div className="h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 flex-shrink-0">
+                        <span className="text-sm font-medium">{contact.nome.charAt(0).toUpperCase()}</span>
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="font-medium truncate">{contact.nome}</div>
                         <div className="text-xs text-gray-500 flex items-center">
                           <Calendar className="h-3 w-3 mr-1 flex-shrink-0" />
                           <span className="truncate">
-                            {contact.diasParaAniversario === 0 ? (
-                              <span className="text-green-600 font-medium">Aniversário hoje!</span>
-                            ) : (
-                              `${formatarData(contact.data_de_nascimento)} (em ${contact.diasParaAniversario} dias)`
-                            )}
+                            {formatarData(contact.data_de_nascimento)} (em {contact.diasParaAniversario} dias)
                           </span>
                         </div>
                       </div>
@@ -273,11 +256,7 @@ export function ContactBirthdayCard() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      className={`h-8 ${
-                        contact.diasParaAniversario === 0
-                          ? "text-green-600 hover:bg-green-50 hover:text-green-700"
-                          : "text-blue-600 hover:bg-blue-50 hover:text-blue-700"
-                      }`}
+                      className="h-8 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
                       onClick={() => openSendMessage(contact)}
                       disabled={!contact.telefone}
                     >
@@ -288,19 +267,15 @@ export function ContactBirthdayCard() {
                 ))}
 
               {contacts.filter(
-                (c) =>
-                  c.diasParaAniversario !== undefined &&
-                  ((c.diasParaAniversario <= 30 && c.diasParaAniversario > 7) || c.diasParaAniversario === 0),
+                (c) => c.diasParaAniversario !== undefined && c.diasParaAniversario <= 30 && c.diasParaAniversario > 7,
               ).length === 0 && (
                 <div className="text-center py-2 text-sm">
-                  <p>Nenhum aniversário hoje ou nos próximos 30 dias</p>
+                  <p>Nenhum aniversário nos próximos 30 dias</p>
                 </div>
               )}
 
               {contacts.filter(
-                (c) =>
-                  c.diasParaAniversario !== undefined &&
-                  ((c.diasParaAniversario <= 30 && c.diasParaAniversario > 7) || c.diasParaAniversario === 0),
+                (c) => c.diasParaAniversario !== undefined && c.diasParaAniversario <= 30 && c.diasParaAniversario > 7,
               ).length > 5 && (
                 <div className="mt-3 text-center">
                   <Link href="/agendamento" passHref>

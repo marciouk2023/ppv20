@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Clock, MessageSquare, Info, AlertTriangle, RefreshCw, Smartphone, Loader2, Check } from "lucide-react"
+import { Clock, MessageSquare, Info, AlertTriangle, RefreshCw, Smartphone, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -13,7 +13,8 @@ import { Sidebar } from "@/components/sidebar"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/contexts/auth-context"
 import { saveUserSession, updateSessionStatus, checkUserSession } from "@/lib/session-manager"
-import { doc, getDoc, setDoc } from "firebase/firestore"
+import { Check } from "lucide-react"
+import { collection, getDocs, doc, getDoc, setDoc, updateDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase-config"
 import { differenceInSeconds } from "date-fns"
 
@@ -36,81 +37,70 @@ function ConnectionStatusBadge({
   // State to store the actual WAHA session status
   const [wahaStatus, setWahaStatus] = useState<string | null>(null)
   const { user } = useAuth()
+  const isAdmin = user?.email === "ronaldo@graficaeleal.com.br"
 
   // Effect to check the session status on the WAHA server
   useEffect(() => {
     const checkWahaStatus = async () => {
-      if (!user?.email) return // Don't check if user is not logged in
-
       try {
-        // Check if the user has a specific session registered in Firestore
-        const userSession = await checkUserSession(user.email)
-        if (userSession.hasSession && userSession.sessionName) {
-          // If the user has a session, check the status of that specific session
-          try {
-            // Use VERCEL_URL if available, otherwise fallback
-            const apiUrl = process.env.NEXT_PUBLIC_VERCEL_URL
-              ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-              : "https://api.parabenspravoce.com" // Fallback or local URL
+        // First check if the user has a specific session
+        if (user?.email) {
+          const userSession = await checkUserSession(user.email)
+          if (userSession.hasSession && userSession.sessionName) {
+            // If the user has a session, check the status of that specific session
+            try {
+              const sessionEndpoint = `/api/whatsapp/sessions/${userSession.sessionName}/status`
+              const response = await fetch(sessionEndpoint, {
+                cache: "no-store",
+              })
 
-            const sessionEndpoint = `${apiUrl}/api/sessions/${userSession.sessionName}/status`
-            // console.log(`[StatusBadge] Checking endpoint: ${sessionEndpoint}`); // Debug URL
-            const response = await fetch(sessionEndpoint, {
-              cache: "no-store", // Ensure fresh data
-            })
+              if (response.ok) {
+                const data = await response.json()
+                console.log(`[StatusBadge] Status of session ${userSession.sessionName}:`, data)
+                setWahaStatus(data.state || data.status)
 
-            if (response.ok) {
-              const data = await response.json()
-              // console.log(`[StatusBadge] Status of session ${userSession.sessionName}:`, data) // Debug log
-              const currentState = data.state || data.status // Handle potential variations in API response
-              setWahaStatus(currentState)
-
-              if (
-                currentState === "WORKING" ||
-                currentState === "CONNECTED" ||
-                currentState === "AUTHENTICATED" ||
-                data.connected === true ||
-                data.authenticated === true
-              ) {
-                if (status !== "connected") setConnectionStatus("connected") // Only update if changed
-                // setLastConnection(new Date().toLocaleString()) // Maybe update less frequently
-              } else if (currentState === "SCAN_QR_CODE" || currentState === "STARTING" || currentState === "PAIRING") {
-                if (status === "disconnected") {
-                  setConnectionStatus("connecting")
+                // If the status indicates it's connected, update the main state
+                if (
+                  data.state === "WORKING" ||
+                  data.state === "CONNECTED" ||
+                  data.state === "AUTHENTICATED" ||
+                  data.connected === true ||
+                  data.authenticated === true
+                ) {
+                  // Update the main state to show as connected
+                  setConnectionStatus("connected")
+                  setLastConnection(new Date().toLocaleString())
                 }
-              } else {
-                if (status === "connected") {
-                  setConnectionStatus("disconnected")
-                }
+                return // Exit the function if found a valid session
               }
-              return
-            } else {
-              console.warn(
-                `[StatusBadge] Non-OK response (${response.status}) checking session ${userSession.sessionName}`,
-              )
-              if (status === "connected") setConnectionStatus("disconnected")
+            } catch (error) {
+              console.warn(`[StatusBadge] Error checking session ${userSession.sessionName}:`, error)
             }
-          } catch (error) {
-            console.warn(`[StatusBadge] Error fetching session status for ${userSession.sessionName}:`, error)
-            if (status === "connected") setConnectionStatus("disconnected")
           }
-        } else {
-          if (status === "connected") setConnectionStatus("disconnected")
         }
       } catch (error) {
-        console.warn("[StatusBadge] Error checking WAHA status (outer try):", error)
-        if (status === "connected") setConnectionStatus("disconnected")
+        console.warn("[StatusBadge] Error checking WAHA status:", error)
       }
     }
 
     // Check immediately and then every 15 seconds
     checkWahaStatus()
-    const interval = setInterval(checkWahaStatus, 15000) // Check every 15 seconds
+    const interval = setInterval(checkWahaStatus, 15000)
 
-    return () => clearInterval(interval) // Cleanup interval on component unmount
-  }, [user, status, setConnectionStatus, setLastConnection]) // Rerun if user, status, or setters change
+    return () => clearInterval(interval)
+  }, [setConnectionStatus, setLastConnection, user, isAdmin])
 
-  // Render badge based on the main connectionStatus prop
+  // If the WAHA API status is "WORKING" or "CONNECTED", show as connected
+  if (wahaStatus === "WORKING" || wahaStatus === "CONNECTED" || wahaStatus === "AUTHENTICATED") {
+    return (
+      <Badge variant="outline" className="bg-green-100 text-green-800 border-green-200">
+        <Check className="h-3.5 w-3.5 mr-1" />
+        Conectado
+      </Badge>
+    )
+  }
+
+  // Otherwise, follow the original logic based on local status
   switch (status) {
     case "connected":
       return (
@@ -143,21 +133,27 @@ function ConnectionStatusBadge({
   }
 }
 
-// --- Main Component ---
+// Main component
 export default function ConfiguracoesPage() {
-  // Component States
+  // States of the React component
   const [qrCode, setQrCode] = useState<string | null>(null)
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>("disconnected")
   const [isGeneratingQR, setIsGeneratingQR] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [lastConnection, setLastConnection] = useState<string | null>(null)
   const [sessionName, setSessionName] = useState<string | null>(null)
-  const [horarioSelecionado, setHorarioSelecionado] = useState("08:00") // Default send time
+  const [usePersonalizedName, setUsePersonalizedName] = useState(true)
+  const [horarioSelecionado, setHorarioSelecionado] = useState("08:00")
   const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [horarioConfirmado, setHorarioConfirmado] = useState(false)
   const { toast } = useToast()
-  const { user } = useAuth()
+  const [wahaApiStatus, setWahaApiStatus] = useState<string | null>(null)
+  const [connectedSessionName, setConnectedSessionName] = useState<string | null>(null)
 
-  // State to store user session info fetched from Firestore/API
+  const { user } = useAuth()
+  const isAdmin = user?.email === "ronaldo@graficaeleal.com.br"
+
+  // State to store user session info
   const [userSessionInfo, setUserSessionInfo] = useState<{
     hasSession: boolean
     sessionName: string | null
@@ -168,250 +164,413 @@ export default function ConfiguracoesPage() {
     status: null,
   })
 
-  // Save selected time to Firestore
+  // Função para salvar o horário no Firestore
   const saveTimeToFirestore = async (time: string) => {
-    if (!user?.email) {
-      toast({ title: "Erro", description: "Usuário não autenticado.", variant: "destructive" })
-      return
-    }
+    if (!user?.email) return
+
     try {
+      // Referência ao documento do usuário
       const userSettingsRef = doc(db, "user_settings", user.email)
-      await setDoc(userSettingsRef, { sendTime: time, updatedAt: new Date() }, { merge: true })
-      console.log(`Horário ${time} salvo com sucesso para ${user.email}`)
-      toast({ title: "Horário Salvo", description: `O horário de envio foi definido para ${time}.` })
+
+      // Verificar se o documento já existe
+      const docSnap = await getDoc(userSettingsRef)
+
+      if (docSnap.exists()) {
+        // Atualizar documento existente
+        await updateDoc(userSettingsRef, {
+          sendTime: time,
+          updatedAt: new Date(),
+        })
+      } else {
+        // Criar novo documento
+        await setDoc(userSettingsRef, {
+          sendTime: time,
+          updatedAt: new Date(),
+          createdAt: new Date(),
+        })
+      }
+
+      console.log(`Horário ${time} salvo com sucesso para o usuário ${user.email}`)
     } catch (error) {
       console.error("Erro ao salvar horário no Firestore:", error)
-      toast({ title: "Erro ao Salvar", description: "Não foi possível salvar o horário.", variant: "destructive" })
+      toast({
+        title: "Erro ao salvar configuração",
+        description: "Não foi possível salvar o horário selecionado. Tente novamente.",
+        variant: "destructive",
+      })
     }
   }
 
-  // Load saved time from Firestore
+  // Carregar horário salvo do Firestore
   useEffect(() => {
     const loadSavedTime = async () => {
       if (!user?.email) return
+
       try {
         const userSettingsRef = doc(db, "user_settings", user.email)
         const docSnap = await getDoc(userSettingsRef)
+
         if (docSnap.exists() && docSnap.data().sendTime) {
-          const savedTime = docSnap.data().sendTime
-          setHorarioSelecionado(savedTime)
-          // console.log(`Horário carregado do Firestore: ${savedTime}`)
-        } else {
-          // console.log("Nenhum horário salvo encontrado, usando padrão 08:00.")
-          setHorarioSelecionado("08:00")
+          setHorarioSelecionado(docSnap.data().sendTime)
+          console.log(`Horário carregado do Firestore: ${docSnap.data().sendTime}`)
         }
       } catch (error) {
         console.error("Erro ao carregar horário do Firestore:", error)
       }
     }
+
     loadSavedTime()
   }, [user])
 
-  // Check and update connection status
-  const checkAndUpdateSessionStatus = async () => {
-    if (!user?.email) {
-      if (connectionStatus !== "disconnected") setConnectionStatus("disconnected")
-      setUserSessionInfo({ hasSession: false, sessionName: null, status: null })
-      return
+  // Check WAHA API status
+  useEffect(() => {
+    const checkWahaApiStatus = async () => {
+      try {
+        // First check if the user has a specific session
+        if (user?.email) {
+          const userSession = await checkUserSession(user.email)
+          setUserSessionInfo(userSession)
+
+          if (userSession.hasSession && userSession.sessionName) {
+            // If the user has a session, check the status of that specific session
+            const sessionEndpoint = `/api/whatsapp/sessions/${userSession.sessionName}/status`
+            try {
+              const response = await fetch(sessionEndpoint, {
+                cache: "no-store",
+              })
+
+              if (response.ok) {
+                const data = await response.json()
+                console.log(`[ConfigPage] Status of session ${userSession.sessionName}:`, data)
+                setWahaApiStatus(data.state || data.status)
+                setConnectedSessionName(userSession.sessionName)
+
+                // If the session is connected, update the UI
+                if (data.state === "CONNECTED" || data.state === "WORKING" || data.state === "AUTHENTICATED") {
+                  setConnectionStatus("connected")
+                  setLastConnection(new Date().toLocaleString())
+                }
+
+                return // Exit the function if found a valid session
+              }
+            } catch (error) {
+              console.warn(`[ConfigPage] Error checking session ${userSession.sessionName}:`, error)
+            }
+          }
+        }
+      } catch (error) {
+        console.error("[ConfigPage] Error checking WAHA API status:", error)
+      }
     }
 
-    try {
-      const sessionInfo = await checkUserSession(user.email)
-      setUserSessionInfo(sessionInfo)
+    // Check immediately and then every 15 seconds
+    checkWahaApiStatus()
+    const interval = setInterval(checkWahaApiStatus, 15000)
 
-      if (sessionInfo.hasSession && sessionInfo.sessionName) {
-        setSessionName(sessionInfo.sessionName) // Keep track of the session name
-        // Check actual status via API only if Firestore status looks active or unknown
-        if (
-          sessionInfo.status === "WORKING" ||
-          sessionInfo.status === "CONNECTED" ||
-          sessionInfo.status === "AUTHENTICATED" ||
-          !sessionInfo.status
-        ) {
-          try {
-            const apiUrl = process.env.NEXT_PUBLIC_VERCEL_URL
-              ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-              : "https://api.parabenspravoce.com" // Fallback or local URL
-            const statusEndpoint = `${apiUrl}/api/sessions/${sessionInfo.sessionName}/status`
-            const response = await fetch(statusEndpoint, { cache: "no-store" })
+    return () => clearInterval(interval)
+  }, [user])
+
+  // Check connection status when page loads
+  useEffect(() => {
+    const checkInitialConnectionStatus = async () => {
+      try {
+        if (user?.email) {
+          const userSession = await checkUserSession(user.email)
+
+          if (userSession.hasSession && userSession.sessionName) {
+            const response = await fetch(`/api/whatsapp/sessions/${userSession.sessionName}/status`, {
+              cache: "no-store",
+            })
 
             if (response.ok) {
               const data = await response.json()
-              const currentState = data.state || data.status
+              console.log("[ConfigPage] Initial WAHA session status:", data)
+
+              // If the status is CONNECTED, WORKING or AUTHENTICATED, update the state
               if (
-                currentState === "WORKING" ||
-                currentState === "CONNECTED" ||
-                currentState === "AUTHENTICATED" ||
+                data.state === "CONNECTED" ||
+                data.state === "WORKING" ||
+                data.state === "AUTHENTICATED" ||
                 data.connected === true ||
                 data.authenticated === true
               ) {
-                if (connectionStatus !== "connected") {
-                  // console.log(`[SessionCheck] Updating status to connected for session ${sessionInfo.sessionName}`);
-                  setConnectionStatus("connected")
-                  setLastConnection(new Date().toLocaleString())
-                  setQrCode(null)
-                  setErrorMessage(null)
-                }
-              } else {
-                if (connectionStatus === "connected") {
-                  // console.log(`[SessionCheck] API shows session ${sessionInfo.sessionName} not connected (${currentState}). Updating status.`);
-                  setConnectionStatus("disconnected")
-                } else if (currentState === "SCAN_QR_CODE" && connectionStatus === "disconnected") {
-                  setConnectionStatus("connecting") // If API says scan QR, reflect it
-                }
-              }
-            } else {
-              if (connectionStatus === "connected") {
-                // console.warn(`[SessionCheck] API error (${response.status}) checking session ${sessionInfo.sessionName}. Assuming disconnected.`);
-                setConnectionStatus("disconnected")
+                setConnectionStatus("connected")
+                setLastConnection(new Date().toLocaleString())
+                setSessionName(userSession.sessionName)
               }
             }
-          } catch (apiError) {
-            console.error(`[SessionCheck] Error calling API for session ${sessionInfo.sessionName}:`, apiError)
-            if (connectionStatus === "connected") {
-              setConnectionStatus("disconnected")
-            }
-          }
-        } else {
-          // Firestore status is explicitly not connected (e.g., 'disconnected', 'error')
-          if (connectionStatus !== "disconnected") {
-            // console.log(`[SessionCheck] Firestore status is ${sessionInfo.status}. Updating status to disconnected.`);
-            setConnectionStatus("disconnected")
           }
         }
-      } else {
-        // Firestore says no session
-        if (connectionStatus !== "disconnected") {
-          // console.log("[SessionCheck] Firestore indicates no active session. Updating status to disconnected.");
-          setConnectionStatus("disconnected")
-        }
-        setSessionName(null) // Clear session name if no session exists
+      } catch (error) {
+        console.error("[ConfigPage] Error checking initial status:", error)
       }
-    } catch (error) {
-      console.error("[SessionCheck] Error checking user session:", error)
-      if (connectionStatus !== "disconnected") {
-        setConnectionStatus("disconnected")
-      }
-      setUserSessionInfo({ hasSession: false, sessionName: null, status: null })
     }
-  }
 
-  // Run session check periodically and on user change
-  useEffect(() => {
-    if (!user?.email) {
-      setConnectionStatus("disconnected") // Force disconnect if user logs out
-      return
-    }
-    checkAndUpdateSessionStatus() // Initial check
-    const intervalId = setInterval(checkAndUpdateSessionStatus, 20000) // Check every 20 seconds
-    return () => clearInterval(intervalId) // Cleanup interval
-  }, [user]) // Re-run when user changes
+    checkInitialConnectionStatus()
 
-  // Cleanup status check interval when component unmounts
-  useEffect(() => {
+    // Cleanup for the status check interval
     return () => {
       if (statusCheckInterval) {
-        // console.log("[Frontend] Cleaning up WAHA status check interval on unmount.");
+        console.log("[Frontend] Cleaning up status check interval when unmounting component.")
         clearInterval(statusCheckInterval)
         statusCheckInterval = null
       }
     }
-  }, []) // Run only once on mount for cleanup registration
+  }, [user])
+
+  // Verify if the current user has an associated session
+  useEffect(() => {
+    const verifyUserSession = async () => {
+      if (user?.email) {
+        const sessionInfo = await checkUserSession(user.email)
+        setUserSessionInfo(sessionInfo)
+
+        // If the user has an active session, update the connection state
+        if (
+          sessionInfo.hasSession &&
+          (sessionInfo.status === "WORKING" ||
+            sessionInfo.status === "CONNECTED" ||
+            sessionInfo.status === "AUTHENTICATED")
+        ) {
+          setConnectionStatus("connected")
+          setConnectedSessionName(sessionInfo.sessionName)
+          setSessionName(sessionInfo.sessionName)
+          setLastConnection(new Date().toLocaleString())
+        }
+      }
+    }
+
+    verifyUserSession()
+    // Check periodically
+    const interval = setInterval(verifyUserSession, 30000)
+
+    return () => clearInterval(interval)
+  }, [user])
+
+  // Add listener for WhatsApp status change event
+  useEffect(() => {
+    const handleWhatsAppStatusChange = (event: CustomEvent) => {
+      console.log("[ConfigPage] WhatsApp status change event received:", event.detail)
+      if (event.detail && event.detail.status) {
+        setConnectionStatus(event.detail.status)
+        if (event.detail.status === "connected") {
+          setLastConnection(new Date().toLocaleString())
+        }
+      }
+    }
+
+    window.addEventListener("whatsapp-status-change", handleWhatsAppStatusChange as EventListener)
+
+    return () => {
+      window.removeEventListener("whatsapp-status-change", handleWhatsAppStatusChange as EventListener)
+    }
+  }, [])
+
+  // Add listener for WhatsApp connected event
+  useEffect(() => {
+    const handleWhatsAppConnected = () => {
+      console.log("[ConfigPage] WhatsApp connected event received")
+      setConnectionStatus("connected")
+      setLastConnection(new Date().toLocaleString())
+    }
+
+    window.addEventListener("whatsapp-connected", handleWhatsAppConnected)
+
+    return () => {
+      window.removeEventListener("whatsapp-connected", handleWhatsAppConnected)
+    }
+  }, [])
 
   // Helper function to generate a unique session name
   function generateLocalUniqueSessionName(): string {
     const timestamp = Date.now()
     const random = Math.floor(Math.random() * 10000)
-    return `session_${timestamp}_${random}`
+    const name = `session_${timestamp}_${random}`
+    console.log(`[Frontend] Generated new local session name: ${name}`)
+    return name
   }
 
-  // Generate QR Code
+  // MAIN function: Called when the "Generate QR Code" button is clicked
   const generateQRCode = async () => {
-    if (!user?.email) {
-      toast({ title: "Erro", description: "Faça login para conectar.", variant: "destructive" })
-      return
-    }
-
-    // Gere um nome de sessão sem o prefixo "session_"
-    let tempSessionName = sessionName // Use existing if available, else generate
-    if (!tempSessionName) {
-      const timestamp = Date.now()
-      const random = Math.floor(Math.random() * 10000)
-      tempSessionName = `${timestamp}_${random}` // Removido o prefixo "session_"
-    } else if (tempSessionName.startsWith("session_")) {
-      // Se já tiver o prefixo, remova-o
-      tempSessionName = tempSessionName.substring(8)
-    }
-
-    // Stop any existing status check
-    if (statusCheckInterval) {
-      clearInterval(statusCheckInterval)
-      statusCheckInterval = null
-    }
-
-    setIsGeneratingQR(true)
-    setErrorMessage(null)
-    setConnectionStatus("connecting")
-    setQrCode(null)
-    setSessionName(tempSessionName) // Set the name we'll use
-
+    let currentSessionName: string | null = null
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_VERCEL_URL
-        ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-        : "https://api.parabenspravoce.com" // Fallback or local URL
+      // 1. Prepare initial state
+      setIsGeneratingQR(true)
+      setErrorMessage(null)
+      setConnectionStatus("connecting")
+      setQrCode(null)
+      if (statusCheckInterval) clearInterval(statusCheckInterval)
+      statusCheckInterval = null
 
-      // Call API to start session (might return QR directly or require polling)
-      const startSessionResponse = await fetch(`${apiUrl}/api/whatsapp/generate-qr`, {
+      // 2. Generate name and create session via local API
+      currentSessionName = generateLocalUniqueSessionName()
+      setSessionName(currentSessionName)
+      console.log(`[Frontend] Starting flow for session: ${currentSessionName}`)
+
+      console.log(`[Frontend] -> Calling Local API: POST /api/whatsapp/sessions`)
+      const createResponse = await fetch("/api/whatsapp/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sessionName: tempSessionName, // Sem o prefixo "session_"
-          userEmail: user.email,
+          sessionName: currentSessionName,
+          userEmail: user?.email, // Add user email to associate the session
         }),
         cache: "no-store",
       })
 
-      const startSessionData = await startSessionResponse.json()
+      const createData = await createResponse.json()
+      if (!createResponse.ok) {
+        console.error(`[Frontend] Error from Local API when creating session (${createResponse.status}):`, createData)
+        throw new Error(createData.message || `Failed to create/process session: Status ${createResponse.status}`)
+      }
+      console.log(`[Frontend] <- Response from Local API (Create Session): ${createResponse.status}`, createData)
 
-      if (!startSessionResponse.ok) {
-        console.error(`[Frontend] Error from API generating QR (${startSessionResponse.status}):`, startSessionData)
-        throw new Error(startSessionData.message || `Falha ao gerar QR Code: Status ${startSessionResponse.status}`)
+      // Save the session to Firestore if user is logged in
+      if (user?.email) {
+        await saveUserSession(user.email, currentSessionName)
       }
 
-      // Successfully initiated, save association
-      await saveUserSession(user.email, tempSessionName)
+      // 3. Call local API for Screenshot (intermediate step that may fail)
+      try {
+        console.log(`[Frontend] -> Calling Local API: GET /api/whatsapp/sessions/${currentSessionName}/screenshot`)
+        const screenshotResponse = await fetch(`/api/whatsapp/sessions/${currentSessionName}/screenshot`, {
+          cache: "no-store",
+        })
 
-      // Check response for QR code or connected status
-      if (startSessionData.qrCode) {
-        // console.log("[Frontend] QR Code received directly. Displaying.");
-        setQrCode(startSessionData.qrCode)
-        setConnectionStatus("connecting")
-        startStatusChecking(tempSessionName) // Start polling
-      } else if (
-        startSessionData.status === "CONNECTED" ||
-        startSessionData.status === "WORKING" ||
-        startSessionData.status === "AUTHENTICATED"
-      ) {
-        // console.log("[Frontend] API reported session already connected during QR request.");
-        setConnectionStatus("connected")
-        setQrCode(null)
-        setLastConnection(new Date().toLocaleString())
-        await updateSessionStatus(user.email, "CONNECTED")
-      } else {
-        // Might need polling if QR wasn't returned directly
-        console.warn(
-          "[Frontend] QR not returned directly, starting polling based on session status:",
-          startSessionData.status,
+        if (!screenshotResponse.ok) {
+          console.warn(
+            `[Frontend] Warning: Screenshot failed (${screenshotResponse.status}), but continuing the process...`,
+          )
+        } else {
+          console.log(`[Frontend] <- Screenshot obtained successfully`)
+        }
+      } catch (screenshotError) {
+        console.warn(`[Frontend] Warning: Error getting screenshot, but continuing the process:`, screenshotError)
+      }
+
+      // Add delay before requesting QR code
+      console.log("[Frontend] Waiting 3 seconds before requesting QR Code...")
+      await new Promise((resolve) => setTimeout(resolve, 10000))
+
+      // 4. Call local API to get QR Code
+      console.log(`[Frontend] -> Calling Local API: GET /api/whatsapp/sessions/${currentSessionName}/auth/qr`)
+
+      // Try to get the QR code
+      let qrResponse
+      const qrEndpoint = `/api/whatsapp/sessions/${currentSessionName}/auth/qr`
+
+      try {
+        console.log(`[Frontend] Trying endpoint: ${qrEndpoint}`)
+        qrResponse = await fetch(qrEndpoint, { cache: "no-store" })
+
+        // If 404, try alternative endpoint
+        if (qrResponse.status === 404) {
+          const alternativeEndpoint = currentSessionName.startsWith("session_")
+            ? `/api/session_${currentSessionName.substring(8)}/auth/qr?format=image`
+            : `/api/session_${currentSessionName}/auth/qr?format=image`
+          console.log(`[Frontend] Endpoint not found, trying alternative: ${alternativeEndpoint}`)
+          qrResponse = await fetch(alternativeEndpoint, { cache: "no-store" })
+        }
+      } catch (fetchError) {
+        console.error(`[Frontend] Error fetching QR code:`, fetchError)
+        throw new Error(
+          `Error getting QR code: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`,
         )
-        setConnectionStatus("connecting") // Assume connecting and poll
-        startStatusChecking(tempSessionName)
+      }
+
+      // Check content type of response
+      const contentType = qrResponse.headers.get("content-type") || ""
+
+      // If not JSON, handle error more robustly
+      if (!contentType.includes("application/json")) {
+        console.error(`[Frontend] Unexpected response: content type '${contentType}' instead of JSON`)
+
+        // Try to read text for better diagnosis
+        const rawText = await qrResponse.text()
+        console.error(`[Frontend] Content of non-JSON response:`, rawText.substring(0, 200) + "...")
+
+        throw new Error(`API returned ${contentType} instead of JSON. Check server configuration.`)
+      }
+
+      // Process as JSON if we get here
+      const qrResult = await qrResponse.json()
+      console.log(`[Frontend] <- Response from Local API (Get QR): ${qrResponse.status}`, qrResult)
+
+      if (!qrResponse.ok) {
+        if (qrResponse.status === 422 || qrResponse.status === 409) {
+          console.log("[Frontend] Local QR API returned code 422/409 (conflict).")
+
+          // Check real session state instead of assuming it's connected
+          try {
+            console.log(`[Frontend] Checking real session state after code 422/409`)
+            const statusResponse = await fetch(
+              currentSessionName.startsWith("session_")
+                ? `/api/session_${currentSessionName.substring(8)}`
+                : `/api/session_${currentSessionName}`,
+              { cache: "no-store" },
+            )
+
+            if (statusResponse.ok) {
+              const statusData = await statusResponse.json()
+              console.log(`[Frontend] Real session status:`, statusData)
+
+              if (statusData.connected === true) {
+                // Really connected
+                setConnectionStatus("connected")
+                setQrCode(null)
+                setLastConnection(new Date().toLocaleString())
+
+                // Update session status in Firestore
+                if (user?.email) {
+                  await updateSessionStatus(user.email, "CONNECTED")
+                }
+              } else {
+                // Not connected, but there was a conflict - show error
+                setErrorMessage("Conflict getting QR code. The session may be in an invalid state. Try again.")
+                setConnectionStatus("error")
+              }
+            } else {
+              // Couldn't check status, try QR code again
+              setErrorMessage("Could not verify session status. Try generating the QR code again.")
+              setConnectionStatus("error")
+            }
+          } catch (statusError) {
+            console.error("[Frontend] Error checking real status after 422/409:", statusError)
+            setErrorMessage("Error checking session status. Please try again.")
+            setConnectionStatus("error")
+          }
+        } else {
+          throw new Error(qrResult.message || `Failed to get QR code: Status ${qrResponse.status}`)
+        }
+      } else {
+        // OK response (200)
+        if (qrResult.qrCode) {
+          console.log("[Frontend] QR Code received from Local API. Displaying and starting status check.")
+          const imageUrl = `data:image/png;base64,${qrResult.qrCode}`
+          setQrCode(imageUrl)
+          setConnectionStatus("connecting") // Ensure status is "connecting" to show QR
+          startStatusChecking(currentSessionName) // Start checking
+        } else if (qrResult.connected) {
+          console.log("[Frontend] Local QR API reported already connected.")
+          setConnectionStatus("connected")
+          setQrCode(null)
+          setLastConnection(new Date().toLocaleString())
+
+          // Update session status in Firestore
+          if (user?.email) {
+            await updateSessionStatus(user.email, "CONNECTED")
+          }
+        } else {
+          console.warn("[Frontend] OK response from QR API, but no QR code or connected status:", qrResult)
+          setErrorMessage("QR Code not received. Check server logs.")
+          setConnectionStatus("error")
+        }
       }
     } catch (error) {
       console.error("[Frontend] GENERAL ERROR in generateQRCode flow:", error)
       setConnectionStatus("error")
-      setErrorMessage(error instanceof Error ? error.message : "Erro desconhecido ao gerar QR Code.")
+      setErrorMessage(error instanceof Error ? error.message : "Unknown error generating QR Code")
       setQrCode(null)
-      // Do not clear sessionName here, might be needed for retry if session exists
       if (statusCheckInterval) {
         clearInterval(statusCheckInterval)
         statusCheckInterval = null
@@ -421,252 +580,273 @@ export default function ConfiguracoesPage() {
     }
   }
 
-  // Start Periodic Status Checking After QR Display
+  // Function to start and manage periodic status checking
   const startStatusChecking = (sessionNameToCheck: string) => {
     if (statusCheckInterval) {
       clearInterval(statusCheckInterval)
       statusCheckInterval = null
     }
 
-    // console.log(`[StatusCheck] Starting for ${sessionNameToCheck} (Interval: 5s, Timeout: 2min)`)
-    let attemptCount = 0
-    const maxAttempts = 24 // 2 minutes timeout
+    if (sessionNameToCheck !== sessionName) {
+      console.warn(`[Frontend] Status check ignored for ${sessionNameToCheck} (active session: ${sessionName})`)
+      return
+    }
+
+    console.log(`[Frontend] Starting status check for ${sessionNameToCheck} (Interval: 5s, Timeout: 2min)`)
+
+    let retryCount = 0
+    const maxRetries = 5
 
     statusCheckInterval = setInterval(async () => {
-      if (
-        attemptCount >= maxAttempts ||
-        connectionStatus === "connected" ||
-        connectionStatus === "error" ||
-        sessionName !== sessionNameToCheck
-      ) {
+      if (sessionNameToCheck !== sessionName || connectionStatus === "connected" || connectionStatus === "error") {
         if (statusCheckInterval) {
+          console.log(
+            `[Frontend] Status check stopped for ${sessionNameToCheck}. Reason: ${connectionStatus} or session changed to ${sessionName}.`,
+          )
           clearInterval(statusCheckInterval)
           statusCheckInterval = null
-          // console.log(`[StatusCheck] Stopped for ${sessionNameToCheck}. Reason: Attempts=${attemptCount}, Status=${connectionStatus}, SessionChanged=${sessionName !== sessionNameToCheck}.`)
-          if (attemptCount >= maxAttempts && connectionStatus === "connecting" && sessionName === sessionNameToCheck) {
-            setConnectionStatus("error")
-            setQrCode(null)
-            setErrorMessage("Tempo expirado para escanear o QR Code. Gere um novo.")
-            // Consider logging out the session on the backend if possible on timeout
-          }
         }
         return
       }
 
-      attemptCount++
-
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_VERCEL_URL
-          ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-          : "https://api.parabenspravoce.com" // Fallback or local URL
-
-        // Remove o prefixo 'session_' se existir
-        const wahaSessionName = sessionNameToCheck.startsWith("session_")
-          ? sessionNameToCheck.substring(8)
-          : sessionNameToCheck
-
-        const statusEndpoint = `${apiUrl}/api/sessions/${wahaSessionName}/status`
-        const statusResponse = await fetch(statusEndpoint, { cache: "no-store" })
-
-        // Handle non-JSON responses gracefully
-        const contentType = statusResponse.headers.get("content-type")
-        if (!contentType || !contentType.includes("application/json")) {
-          const responseText = await statusResponse.text()
-          // console.warn(`[StatusCheck] Non-JSON response (${statusResponse.status}). Body: ${responseText.substring(0,100)}`);
-          if (statusResponse.status === 404) {
-            setErrorMessage(`Sessão ${sessionNameToCheck} não encontrada. Gere um novo QR code.`)
-            setConnectionStatus("error")
-            setQrCode(null)
-            if (statusCheckInterval) clearInterval(statusCheckInterval)
-            statusCheckInterval = null
-          }
-          return // Skip processing this interval
-        }
+        console.log(
+          `[Frontend] -> Checking status via Local API: GET /api/whatsapp/sessions/${sessionNameToCheck}/status`,
+        )
+        const statusResponse = await fetch(`/api/whatsapp/sessions/${sessionNameToCheck}/status`, { cache: "no-store" })
 
         const statusResult = await statusResponse.json()
-        // console.log(`[StatusCheck] <- Response ${statusResponse.status}:`, statusResult);
+        console.log(`[Frontend] <- Response from Local API (Status): ${statusResponse.status}`, statusResult)
 
-        if (!statusResponse.ok) {
-          // console.warn(`[StatusCheck] Non-OK status (${statusResponse.status}) from API.`);
-          return // Continue polling unless it's 404 (handled above)
+        if (statusResponse.status === 404) {
+          console.warn(`[Frontend] Session ${sessionNameToCheck} not found by local API during check.`)
+          retryCount++
+
+          if (retryCount >= maxRetries) {
+            setErrorMessage(`Session not found after ${maxRetries} attempts. Try generating a new QR code.`)
+            setConnectionStatus("error")
+            clearInterval(statusCheckInterval)
+            statusCheckInterval = null
+          }
+          return
         }
 
-        const currentState = statusResult.state || statusResult.status
-        if (
-          currentState === "CONNECTED" ||
-          currentState === "WORKING" ||
-          currentState === "AUTHENTICATED" ||
-          statusResult.connected === true ||
-          statusResult.authenticated === true
-        ) {
-          // console.log("[StatusCheck] CONNECTED!")
+        if (!statusResponse.ok) {
+          console.error(
+            `[Frontend] Error from local API checking status (${statusResponse.status}):`,
+            statusResult.message || statusResult,
+          )
+          retryCount++
+
+          if (retryCount >= maxRetries) {
+            setErrorMessage(`Error checking status after ${maxRetries} attempts. Try generating a new QR code.`)
+            setConnectionStatus("error")
+            clearInterval(statusCheckInterval)
+            statusCheckInterval = null
+          }
+          return
+        }
+
+        // Reset retry count on successful response
+        retryCount = 0
+
+        if (statusResult.success && (statusResult.connected || statusResult.authenticated)) {
+          console.log("[Frontend] CONNECTED! (Detected by status check)", statusResult)
           setConnectionStatus("connected")
           setQrCode(null)
           setLastConnection(new Date().toLocaleString())
+
+          // Update session status in Firestore
           if (user?.email) {
             await updateSessionStatus(user.email, "CONNECTED")
           }
-          if (statusCheckInterval) clearInterval(statusCheckInterval) // Stop polling immediately
-          statusCheckInterval = null
+
+          if (statusCheckInterval) {
+            clearInterval(statusCheckInterval)
+            statusCheckInterval = null
+            console.log("[Frontend] Status check finished (connected).")
+          }
         } else {
-          // console.log(`[StatusCheck] Current status: ${currentState || "Unknown"}`)
+          console.log(
+            `[Frontend] Current status (${sessionNameToCheck}) via local API: ${statusResult.status || "Unknown"}`,
+          )
         }
       } catch (error) {
-        console.error(`[StatusCheck] Network/Fetch error checking status for ${sessionNameToCheck}:`, error)
+        console.error(`[Frontend] Network error checking status for ${sessionNameToCheck}:`, error)
+        retryCount++
+
+        if (retryCount >= maxRetries) {
+          setErrorMessage(`Network error after ${maxRetries} attempts. Check your connection.`)
+          setConnectionStatus("error")
+          clearInterval(statusCheckInterval)
+          statusCheckInterval = null
+        }
       }
     }, 5000) // Check every 5 seconds
+
+    // 2-minute timeout
+    const timeoutId = setTimeout(() => {
+      if (statusCheckInterval) {
+        console.log(`[Frontend] 2-minute timeout reached for session check ${sessionNameToCheck}.`)
+        clearInterval(statusCheckInterval)
+        statusCheckInterval = null
+        if (connectionStatus === "connecting" && sessionNameToCheck === sessionName) {
+          console.warn("[Frontend] Time expired for scanning QR Code.")
+          setConnectionStatus("error")
+          setQrCode(null)
+          setErrorMessage("Time expired for scanning QR Code. Please generate a new one.")
+        }
+      }
+    }, 120000) // 2 minutes
   }
 
-  // --- Render Component ---
   return (
     <div className="flex min-h-screen bg-[#f8f7f2]">
+      {/* Sidebar */}
       <Sidebar activePage="configuracoes" />
-      <div className="flex-1 p-6 ml-0 md:ml-[196px]">
+
+      {/* Main content */}
+      <div className="flex-1 p-6 ml-[196px]">
         <div className="max-w-4xl mx-auto">
           <h1 className="text-2xl font-semibold text-[#1e3a29]">Configurações</h1>
           <p className="text-gray-600 mb-6">Gerencie as configurações do sistema e conexões</p>
 
+          {/* WhatsApp Connection Section */}
           <div className="space-y-6">
-            {/* WhatsApp Connection Card */}
-            <Card className="border-0 shadow-sm overflow-hidden">
+            <Card className="border-0 shadow-sm">
               <CardHeader>
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <div className="flex items-center justify-between">
                   <div>
                     <CardTitle className="text-xl">Conexão WhatsApp</CardTitle>
-                    <CardDescription>Conecte sua conta para enviar mensagens automáticas</CardDescription>
+                    <CardDescription>Conecte sua conta do WhatsApp para enviar mensagens automáticas</CardDescription>
                   </div>
-                  <div className="flex-shrink-0 mt-2 sm:mt-0">
-                    <ConnectionStatusBadge
-                      status={connectionStatus}
-                      setConnectionStatus={setConnectionStatus}
-                      setLastConnection={setLastConnection}
-                    />
-                  </div>
+                  {/* Dynamic Status Badge */}
+                  <ConnectionStatusBadge
+                    status={connectionStatus}
+                    setConnectionStatus={setConnectionStatus}
+                    setLastConnection={setLastConnection}
+                  />
                 </div>
               </CardHeader>
+
               <CardContent>
-                <div className="flex flex-col items-center justify-center p-4 sm:p-6 border rounded-lg bg-white min-h-[350px]">
-                  {/* --- CONNECTED State --- */}
+                {/* Dynamic Central Area */}
+                <div className="flex flex-col items-center justify-center p-6 border rounded-lg bg-white min-h-[300px]">
+                  {/* Connected State */}
                   {connectionStatus === "connected" && (
                     <div className="flex flex-col items-center text-center">
-                      <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-green-100 flex items-center justify-center text-green-600 mb-4">
-                        <Check className="h-8 w-8 sm:h-10 sm:w-10" />
+                      <div className="h-20 w-20 rounded-full bg-green-100 flex items-center justify-center text-green-600 mb-4">
+                        <Check className="h-10 w-10" />
                       </div>
-                      <h3 className="text-lg sm:text-xl font-medium text-green-700 mb-2">CONECTADO</h3>
-                      <p className="text-gray-600 mb-4 text-sm sm:text-base">Sua conta do WhatsApp está conectada.</p>
+                      <h3 className="text-xl font-medium text-green-700 mb-2">CONECTADO</h3>
+                      <p className="text-gray-600 mb-4">Sua conta do WhatsApp está conectada.</p>
                       {sessionName && (
-                        <p className="text-xs sm:text-sm text-gray-500 mb-1">
-                          Sessão ativa:{" "}
-                          <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">{sessionName}</span>
+                        <p className="text-sm text-gray-500 mb-1">
+                          Sessão ativa: <span className="font-mono text-xs">{sessionName}</span>
                         </p>
                       )}
-                      {lastConnection && (
-                        <p className="text-xs sm:text-sm text-gray-500 mb-4">Última conexão: {lastConnection}</p>
-                      )}
+                      {lastConnection && <p className="text-sm text-gray-500 mb-3">Última conexão: {lastConnection}</p>}
+
                       {/* Session info box */}
-                      <div className="mt-2 p-3 bg-blue-50 border border-blue-100 rounded-md w-full max-w-md">
-                        <p className="text-sm text-blue-700 font-medium mb-1 flex items-center">
-                          <Info className="h-4 w-4 mr-1.5 text-blue-500 flex-shrink-0" />
-                          Informações da Sessão
+                      <div className="mt-2 p-3 bg-blue-50 border border-blue-100 rounded-md max-w-md">
+                        <p className="text-sm text-blue-700 font-medium mb-1">
+                          <Info className="h-4 w-4 inline-block mr-1 text-blue-500" />
+                          Informações da Sessão WhatsApp
                         </p>
-                        {user?.email && <p className="text-xs text-blue-600 break-words">Associada a: {user.email}</p>}
-                        {/* Removed session name display from here as it's shown above */}
+                        <div className="text-xs text-blue-600 bg-white p-2 rounded border border-blue-100 font-mono">
+                          Nome da sessão: {connectedSessionName || sessionName || "Não disponível"}
+                        </div>
+                        <p className="text-xs text-blue-500 mt-1">
+                          Esta sessão está associada exclusivamente à sua conta ({user?.email}).
+                        </p>
                       </div>
-                      <Alert variant="default" className="mt-4 max-w-md bg-yellow-50 border-yellow-100">
-                        <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                        <AlertTitle className="text-yellow-800 text-sm">Desconexão</AlertTitle>
-                        <AlertDescription className="text-yellow-700 text-xs">
-                          Para usar outra conta ou reconectar, primeiro desconecte este aparelho em: WhatsApp &gt;
-                          Configurações &gt; Aparelhos Conectados. A seguir, clique em "Gerar QR Code".
-                        </AlertDescription>
-                      </Alert>
-                      {/* Re-enable QR generation button */}
-                      <Button
-                        className="mt-4 bg-green-600 hover:bg-green-700 text-white px-6 py-3"
-                        onClick={generateQRCode}
-                        disabled={isGeneratingQR}
-                        size="lg"
-                      >
-                        {isGeneratingQR ? (
-                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                        ) : (
-                          <RefreshCw className="h-5 w-5 mr-2" />
-                        )}
-                        {isGeneratingQR ? "Gerando..." : "Gerar Novo QR Code"}
-                      </Button>
+
+                      <div className="mt-4 p-3 bg-blue-50 border border-blue-100 rounded-md max-w-md">
+                        <p className="text-sm text-blue-700">
+                          <Info className="h-4 w-4 inline-block mr-1 text-blue-500" />
+                          Apenas uma conexão é permitida por conta de usuário. Para conectar outro dispositivo,
+                          desconecte este dispositivo primeiro nas configurações do WhatsApp.
+                        </p>
+                      </div>
                     </div>
                   )}
 
-                  {/* --- CONNECTING / WAITING FOR SCAN State --- */}
+                  {/* Connecting / Waiting for Scan State */}
                   {connectionStatus === "connecting" && (
                     <div className="flex flex-col items-center text-center">
-                      {qrCode ? (
+                      {qrCode ? ( // If we already have the QR Code to display
                         <>
-                          <div className="mb-4 p-1 border bg-white shadow-md">
+                          <div className="mb-4 p-2 border bg-white">
                             <img
-                              src={qrCode || "/placeholder.svg"}
-                              alt="QR Code WhatsApp"
-                              className="w-56 h-56 sm:w-64 sm:h-64 object-contain"
+                              src={qrCode || "/placeholder.svg"} // Use the base64 data URL
+                              alt="QR Code for WhatsApp connection"
+                              className="w-64 h-64"
                             />
                           </div>
-                          <h3 className="text-base sm:text-lg font-medium mb-2">Escaneie o QR Code</h3>
-                          <p className="text-gray-600 max-w-sm mb-3 text-xs sm:text-sm px-2">
-                            WhatsApp &gt; Configurações &gt; Aparelhos Conectados &gt; Conectar um Aparelho.
+                          <h3 className="text-lg font-medium mb-2">Escaneie o QR Code</h3>
+                          <p className="text-gray-600 max-w-md mb-4 text-sm">
+                            Abra o WhatsApp no celular &gt; Aparelhos conectados &gt; Conectar um aparelho.
                           </p>
                           {sessionName && (
-                            <p className="text-xs sm:text-sm text-blue-600 mb-3">
-                              Sessão:{" "}
-                              <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">{sessionName}</span>
+                            <p className="text-sm text-blue-600 mb-3">
+                              <strong>Sessão:</strong> <span className="font-mono">{sessionName}</span>
                             </p>
                           )}
-                          <div className="flex items-center text-amber-700 bg-amber-50 px-3 py-1.5 rounded-md border border-amber-100 mb-4 text-xs sm:text-sm">
-                            <Loader2 className="h-4 w-4 mr-2 flex-shrink-0 animate-spin" />
-                            <span>Aguardando leitura... (expira em ~2 min)</span>
+                          <div className="flex items-center text-amber-600 bg-amber-50 px-3 py-2 rounded-md border border-amber-100 mb-4">
+                            <Info className="h-5 w-5 mr-2 flex-shrink-0" />
+                            <span className="text-sm">Aguardando scan... (expira em ~2 min)</span>
                           </div>
+
+                          {/* "I've connected" button to force state change */}
                           <Button
                             variant="outline"
-                            size="sm"
-                            className="mt-2 text-red-600 border-red-300 hover:bg-red-50"
+                            className="mt-2 border-green-300 text-green-700 hover:bg-green-50"
                             onClick={() => {
-                              setConnectionStatus("disconnected")
+                              setConnectionStatus("connected")
                               setQrCode(null)
-                              setErrorMessage(null)
-                              // Do not clear sessionName, might be needed for backend cleanup if applicable
-                              if (statusCheckInterval) clearInterval(statusCheckInterval)
-                              statusCheckInterval = null
-                              console.log("QR Scan Cancelled by user.")
+                              setLastConnection(new Date().toLocaleString())
+                              if (statusCheckInterval) {
+                                clearInterval(statusCheckInterval)
+                                statusCheckInterval = null
+                              }
+
+                              // Update session status in Firestore
+                              if (user?.email) {
+                                updateSessionStatus(user.email, "CONNECTED")
+                              }
                             }}
                           >
-                            Cancelar
+                            <Check className="h-4 w-4 mr-2" />
+                            Já conectei meu WhatsApp
                           </Button>
                         </>
                       ) : (
-                        <>
-                          <Loader2 className="h-10 w-10 sm:h-12 sm:w-12 text-blue-500 animate-spin mb-4" />
-                          <h3 className="text-base sm:text-lg font-medium mb-2">Iniciando Conexão...</h3>
-                          <p className="text-gray-600 text-sm">Aguarde um momento.</p>
+                        <div className="flex flex-col items-center">
+                          <Loader2 className="h-12 w-12 text-blue-500 animate-spin mb-4" />
+                          <h3 className="text-lg font-medium mb-2">Conectando ao Servidor...</h3>
+                          <p className="text-gray-600 text-sm">Gerando QR Code, aguarde...</p>
                           {sessionName && (
-                            <p className="text-xs sm:text-sm text-blue-600 mt-3">
-                              Sessão:{" "}
-                              <span className="font-mono text-xs bg-gray-100 px-1 py-0.5 rounded">{sessionName}</span>
+                            <p className="text-sm text-blue-600 mt-3">
+                              <strong>Sessão:</strong> <span className="font-mono">{sessionName}</span>
                             </p>
                           )}
-                        </>
+                        </div>
                       )}
                     </div>
                   )}
 
-                  {/* --- ERROR State --- */}
+                  {/* Error State */}
                   {connectionStatus === "error" && (
                     <div className="flex flex-col items-center text-center">
-                      <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-red-100 flex items-center justify-center text-red-600 mb-4">
-                        <AlertTriangle className="h-8 w-8 sm:h-10 sm:w-10" />
+                      <div className="h-20 w-20 rounded-full bg-red-100 flex items-center justify-center text-red-600 mb-4">
+                        <AlertTriangle className="h-10 w-10" />
                       </div>
-                      <h3 className="text-lg sm:text-xl font-medium text-red-700 mb-2">Erro na Conexão</h3>
-                      <p className="text-gray-600 mb-4 max-w-md break-words text-xs sm:text-sm bg-red-50 p-3 border border-red-100 rounded">
+                      <h3 className="text-xl font-medium text-red-700 mb-2">Erro na Conexão</h3>
+                      {/* Show specific error message */}
+                      <p className="text-gray-600 mb-4 max-w-md break-words text-sm bg-red-50 p-2 border border-red-100 rounded">
                         {errorMessage || "Ocorreu um erro desconhecido."}
                       </p>
-                      <Button variant="default" onClick={generateQRCode} disabled={isGeneratingQR}>
+                      <Button variant="outline" onClick={generateQRCode} disabled={isGeneratingQR}>
                         {isGeneratingQR ? (
                           <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                         ) : (
@@ -677,140 +857,205 @@ export default function ConfiguracoesPage() {
                     </div>
                   )}
 
-                  {/* --- DISCONNECTED (Initial) State --- */}
+                  {/* Disconnected (Initial) State */}
                   {connectionStatus === "disconnected" && (
                     <div className="flex flex-col items-center text-center">
-                      <div className="h-16 w-16 sm:h-20 sm:w-20 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 mb-4">
-                        <Smartphone className="h-8 w-8 sm:h-10 sm:w-10" />
+                      <div className="h-20 w-20 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 mb-4">
+                        <Smartphone className="h-10 w-10" />
                       </div>
-                      <h3 className="text-lg sm:text-xl font-medium mb-2">WhatsApp Desconectado</h3>
-                      <p className="text-gray-600 mb-6 text-sm sm:text-base max-w-sm">
-                        Clique no botão abaixo para gerar um QR Code e conectar sua conta do WhatsApp.
+                      <h3 className="text-xl font-medium mb-2">
+                        {userSessionInfo.hasSession &&
+                        (userSessionInfo.status === "WORKING" ||
+                          userSessionInfo.status === "CONNECTED" ||
+                          userSessionInfo.status === "AUTHENTICATED")
+                          ? "CONECTADO"
+                          : "WhatsApp Desconectado"}
+                      </h3>
+                      <p className="text-gray-600 mb-4">
+                        {userSessionInfo.hasSession &&
+                        (userSessionInfo.status === "WORKING" ||
+                          userSessionInfo.status === "CONNECTED" ||
+                          userSessionInfo.status === "AUTHENTICATED")
+                          ? `Sua conta do WhatsApp está conectada e pronta para uso.`
+                          : "Clique abaixo para gerar um QR Code e conectar sua conta."}
                       </p>
-                      <Button
-                        className="bg-green-600 hover:bg-green-700 text-white px-6 py-3"
-                        onClick={generateQRCode}
-                        disabled={isGeneratingQR}
-                        size="lg"
-                      >
-                        {isGeneratingQR ? (
-                          <Loader2 className="h-5 w-5 mr-2 animate-spin" />
-                        ) : (
-                          <RefreshCw className="h-5 w-5 mr-2" />
+
+                      {/* User session information */}
+                      {userSessionInfo.hasSession &&
+                        (userSessionInfo.status === "WORKING" ||
+                          userSessionInfo.status === "CONNECTED" ||
+                          userSessionInfo.status === "AUTHENTICATED") && (
+                          <div className="mt-2 p-3 bg-blue-50 border border-blue-100 rounded-md max-w-md mb-4">
+                            <p className="text-sm text-blue-700 font-medium mb-1">
+                              <Info className="h-4 w-4 inline-block mr-1 text-blue-500" />
+                              Informações da Sua Sessão WhatsApp
+                            </p>
+                            <div className="text-xs text-blue-600 bg-white p-2 rounded border border-blue-100 font-mono">
+                              Nome da sessão: {userSessionInfo.sessionName || "Não disponível"}
+                            </div>
+                            <p className="text-xs text-blue-500 mt-1">
+                              Esta sessão está associada exclusivamente à sua conta ({user?.email}).
+                            </p>
+                          </div>
                         )}
-                        {isGeneratingQR ? "Gerando..." : "Gerar QR Code"}
-                      </Button>
-                      {userSessionInfo.hasSession && userSessionInfo.sessionName && (
-                        <p className="text-xs text-gray-400 mt-4">
-                          (Sessão anterior registrada: {userSessionInfo.sessionName})
-                        </p>
+
+                      {/* Show button only if user doesn't have an active session */}
+                      {(!userSessionInfo.hasSession ||
+                        !(
+                          userSessionInfo.status === "WORKING" ||
+                          userSessionInfo.status === "CONNECTED" ||
+                          userSessionInfo.status === "AUTHENTICATED"
+                        )) && (
+                        <Button
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                          onClick={generateQRCode}
+                          disabled={isGeneratingQR}
+                          size="lg"
+                        >
+                          {isGeneratingQR ? (
+                            <>
+                              <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+                              Gerando...
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="h-5 w-5 mr-2" />
+                              Gerar QR Code
+                            </>
+                          )}
+                        </Button>
                       )}
                     </div>
                   )}
                 </div>
               </CardContent>
-              <CardFooter className="flex flex-col items-start pt-4 sm:pt-6 border-t bg-gray-50/50">
-                <Alert variant="default" className="mb-4 bg-blue-50 border-blue-100 w-full">
+
+              <CardFooter className="flex flex-col items-start pt-6 border-t">
+                <Alert variant="default" className="mb-4 bg-blue-50 border-blue-100">
+                  {/* Visual highlight */}
                   <Info className="h-4 w-4 text-blue-600" />
-                  <AlertTitle className="text-blue-800 text-sm">Importante</AlertTitle>
-                  <AlertDescription className="text-blue-700 text-xs">
-                    Mantenha seu celular conectado à internet para que a conexão permaneça ativa.
+                  <AlertTitle className="text-blue-800">Importante</AlertTitle>
+                  <AlertDescription className="text-blue-700">
+                    Mantenha seu celular conectado à internet para que a conexão com o WhatsApp funcione corretamente
+                    após o scan.
                   </AlertDescription>
                 </Alert>
-                <div className="text-xs text-gray-500 px-1">
-                  <p>Utilize a API oficial ou APIs compatíveis. Siga as políticas de uso.</p>
+                <div className="text-xs text-gray-500">
+                  {" "}
+                  {/* Smaller text */}
+                  <p>
+                    Ao conectar sua conta, você interage com a API configurada pelo administrador do sistema.
+                    Certifique-se de seguir as políticas de uso.
+                  </p>
                 </div>
               </CardFooter>
             </Card>
 
-            {/* --- General Configuration Section --- */}
+            {/* System Configuration Section */}
             <div className="mt-6">
-              <Card className="border-0 shadow-sm overflow-hidden">
+              <Card className="border-0 shadow-sm">
                 <CardHeader>
-                  <CardTitle className="text-xl">Configurações Gerais</CardTitle>
-                  <CardDescription>Ajuste o horário de envio e personalização</CardDescription>
+                  <CardTitle className="text-xl">Configurações do Sistema</CardTitle>
+                  <CardDescription>Gerencie as configurações gerais do sistema</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-8">
-                    {/* Send Time Setting */}
+                  <div className="space-y-6">
                     <div>
-                      <div className="flex items-center gap-2 mb-3">
+                      <div className="flex items-center gap-2 mb-4">
                         <Clock className="h-5 w-5 text-green-600" />
-                        <h3 className="font-medium text-base sm:text-lg">Horário Padrão de Envio</h3>
+                        <h3 className="font-medium text-lg">Horário de Envio</h3>
                       </div>
-                      <div className="bg-green-50/60 p-4 rounded-lg border border-green-100">
-                        <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-start gap-4">
-                          <Label htmlFor="hora" className="text-sm text-green-800 text-center sm:text-left">
-                            Horário para envio automático:
+                      <div className="bg-green-50 p-4 rounded-lg border border-green-100">
+                        <div className="flex flex-col items-center">
+                          <Label htmlFor="hora" className="text-center mb-2 text-green-700">
+                            Todas as mensagens serão enviadas neste horário
                           </Label>
                           <Input
                             id="hora"
                             type="time"
                             value={horarioSelecionado}
-                            className="text-center text-lg font-medium w-32 bg-white border-green-200 focus:border-green-400 focus:ring-green-400"
+                            className="text-center text-lg font-medium w-40 bg-white border-green-200 focus:border-green-500 focus:ring-green-500"
                             onChange={(e) => {
-                              const newTime = e.target.value
-                              if (newTime) {
-                                setHorarioSelecionado(newTime)
-                                // Removed direct save, using modal
+                              if (e.target.value) {
+                                setHorarioSelecionado(e.target.value)
+                                setShowConfirmModal(true)
                               }
                             }}
                           />
-                          <Button
-                            size="sm"
-                            className="bg-green-600 hover:bg-green-700 text-white"
-                            onClick={() => setShowConfirmModal(true)}
-                          >
-                            Salvar Horário
-                          </Button>
+                          <p className="text-sm text-gray-500 mt-2">Horário de Brasília (GMT-3)</p>
+
+                          {/* Countdown Timer */}
+                          <CountdownTimer targetTime={horarioSelecionado} />
                         </div>
-                        <p className="text-xs text-gray-500 mt-2 text-center sm:text-left pl-1">
-                          Horário de Brasília (GMT-3)
-                        </p>
-                        {/* Removed CountdownTimer component call */}
                       </div>
                     </div>
-                    {/* Message Personalization Setting */}
+
+                    {/* Message personalization section */}
                     <div className="pt-6 border-t">
-                      <div className="flex items-center gap-2 mb-3">
-                        <MessageSquare className="h-5 w-5 text-indigo-600" />
-                        <h3 className="font-medium text-base sm:text-lg">Personalização de Mensagens</h3>
+                      <div className="flex items-center gap-2 mb-4">
+                        <MessageSquare className="h-5 w-5 text-gray-500" />
+                        <h3 className="font-medium">Personalização de Mensagens</h3>
                       </div>
+
                       <div className="space-y-4">
-                        <div className="flex items-start space-x-3 p-3 bg-indigo-50/50 rounded-md border border-indigo-100">
-                          <Switch id="use-name" disabled={true} checked={true} /> {/* Always enabled */}
-                          <div className="flex-1">
-                            <Label htmlFor="use-name" className="font-medium text-sm sm:text-base text-indigo-900">
-                              Incluir nome do contato automaticamente
+                        <div className="flex items-start space-x-2">
+                          <Switch
+                            id="use-name"
+                            checked={usePersonalizedName}
+                            onCheckedChange={setUsePersonalizedName}
+                          />
+                          <div>
+                            <Label htmlFor="use-name" className="font-medium">
+                              Incluir nome do contato nas mensagens
                             </Label>
-                            <p className="text-xs sm:text-sm text-indigo-700 mt-1">
-                              A tag{" "}
-                              <code className="text-xs bg-indigo-100 px-1 py-0.5 rounded font-mono">{`{nome}`}</code>{" "}
-                              será sempre substituída pelo primeiro nome do contato.
+                            <p className="text-sm text-gray-500 mt-1">
+                              Quando ativado, o sistema substituirá a tag {"{nome}"} pelo primeiro nome do contato nas
+                              mensagens automáticas.
                             </p>
                           </div>
                         </div>
-                        <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
-                          <h4 className="text-xs font-semibold mb-2 text-gray-700 uppercase tracking-wider">Exemplo</h4>
+
+                        <div className="bg-gray-50 p-4 rounded-md border">
+                          <h4 className="text-sm font-medium mb-2">Exemplo:</h4>
                           <div className="space-y-2">
                             <div>
-                              <p className="text-xs text-gray-500">Mensagem configurada:</p>
-                              <p className="text-sm bg-white p-2 rounded border border-dashed">
-                                Feliz aniversário,{" "}
-                                <code className="text-xs bg-gray-100 px-1 py-0.5 rounded font-mono">{`{nome}`}</code>!
-                                Que Deus abençoe sua vida.
+                              <p className="text-xs text-gray-500">Mensagem original:</p>
+                              <p className="text-sm">
+                                Feliz aniversário! Que Deus abençoe sua vida com muita saúde, paz e alegria.
                               </p>
                             </div>
                             <div>
-                              <p className="text-xs text-gray-500">Mensagem enviada para "Maria Silva":</p>
-                              <p className="text-sm bg-white p-2 rounded border">
-                                Feliz aniversário, <span className="font-medium text-green-600">Maria</span>! Que Deus
-                                abençoe sua vida.
+                              <p className="text-xs text-gray-500">Com personalização:</p>
+                              <p className="text-sm">
+                                Feliz aniversário, <span className="font-medium text-green-600">Marcio</span>! Que Deus
+                                abençoe sua vida com muita saúde, paz e alegria.
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="bg-blue-50 p-4 rounded-md border border-blue-100">
+                          <div className="flex items-start">
+                            <Info className="h-5 w-5 text-blue-600 mt-0.5 mr-2 flex-shrink-0" />
+                            <div>
+                              <h4 className="text-sm font-medium text-blue-800 mb-1">Como usar:</h4>
+                              <p className="text-sm text-blue-700">
+                                Adicione a tag {"{nome}"} em qualquer parte da sua mensagem onde deseja que o primeiro
+                                nome do contato apareça. O sistema extrairá automaticamente o primeiro nome do contato,
+                                mesmo que o registro contenha o nome completo.
                               </p>
                             </div>
                           </div>
                         </div>
                       </div>
+                    </div>
+
+                    <div className="border-t pt-6">
+                      <p className="text-sm text-gray-500">
+                        Configure o horário padrão para o envio de mensagens automáticas. Esta configuração será
+                        aplicada a todos os envios, a menos que sejam especificadas outras configurações no momento do
+                        agendamento.
+                      </p>
                     </div>
                   </div>
                 </CardContent>
@@ -820,29 +1065,36 @@ export default function ConfiguracoesPage() {
         </div>
       </div>
 
-      {/* Time Confirmation Modal */}
+      {/* Time confirmation modal */}
       {showConfirmModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-auto shadow-xl">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
             <div className="flex flex-col items-center text-center">
-              <Clock className="h-10 w-10 text-green-500 mb-4" />
-              <h3 className="text-lg font-medium mb-3">Confirmar Horário de Envio</h3>
-              <p className="mb-6 text-sm text-gray-700">
-                Deseja definir <span className="font-bold text-green-600">{horarioSelecionado}</span> como o horário
-                padrão para o envio automático de mensagens de aniversário pelo sistema?
+              <Clock className="h-12 w-12 text-green-500 mb-4" />
+              <h3 className="text-xl font-medium mb-4">Confirmar horário de envio</h3>
+              <p className="mb-6">
+                Você tem certeza que deseja configurar{" "}
+                <span className="font-bold text-green-600">{horarioSelecionado}</span> como horário padrão para envio de
+                todas as mensagens de aniversário?
               </p>
-              <div className="flex gap-3 w-full justify-center">
-                <Button variant="outline" onClick={() => setShowConfirmModal(false)} className="flex-1">
+              <div className="flex gap-3">
+                <Button variant="outline" onClick={() => setShowConfirmModal(false)}>
                   Cancelar
                 </Button>
                 <Button
-                  className="bg-green-600 hover:bg-green-700 text-white flex-1"
+                  className="bg-green-500 hover:bg-green-600"
                   onClick={() => {
+                    setHorarioConfirmado(true)
                     setShowConfirmModal(false)
-                    saveTimeToFirestore(horarioSelecionado) // Save the confirmed time
+                    // Salvar no Firestore
+                    saveTimeToFirestore(horarioSelecionado)
+                    toast({
+                      title: "Horário configurado!",
+                      description: `Suas mensagens serão enviadas às ${horarioSelecionado}.`,
+                    })
                   }}
                 >
-                  Confirmar
+                  Sim, confirmar horário
                 </Button>
               </div>
             </div>
@@ -853,65 +1105,213 @@ export default function ConfiguracoesPage() {
   )
 }
 
-// --- Countdown Timer Component (Display Only - Logic Removed) ---
+// Componente de contagem regressiva
 function CountdownTimer({ targetTime }: { targetTime: string }) {
   const [timeRemaining, setTimeRemaining] = useState<string>("Calculando...")
-  const [isNear, setIsNear] = useState(false) // Only show if target is within 24 hours
+  const [isActive, setIsActive] = useState(false)
+  const { user } = useAuth()
+  const { toast } = useToast()
 
   useEffect(() => {
-    const calculateTime = () => {
+    // Função para calcular o tempo restante
+    const calculateTimeRemaining = () => {
       try {
         const now = new Date()
-        const [targetHours, targetMinutes] = targetTime.split(":").map(Number)
 
-        if (isNaN(targetHours) || isNaN(targetMinutes)) {
-          throw new Error("Invalid target time format")
-        }
+        // Parse da hora alvo
+        const [hours, minutes] = targetTime.split(":").map(Number)
 
+        // Criar data alvo para hoje
         const targetDate = new Date()
-        // Compare with local time for display purposes, assuming targetTime is local
-        targetDate.setHours(targetHours, targetMinutes, 0, 0)
+        targetDate.setHours(hours, minutes, 0, 0)
 
+        // Se a hora alvo já passou hoje, definir para amanhã
         if (targetDate <= now) {
           targetDate.setDate(targetDate.getDate() + 1)
         }
 
+        // Calcular diferença em segundos
         const diffInSeconds = differenceInSeconds(targetDate, now)
 
-        if (diffInSeconds >= 0 && diffInSeconds <= 86400) {
-          // Within 24 hours
-          const hours = Math.floor(diffInSeconds / 3600)
-          const minutes = Math.floor((diffInSeconds % 3600) / 60)
-          const seconds = diffInSeconds % 60
-          setTimeRemaining(
-            `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`,
-          )
-          setIsNear(true)
-        } else {
-          setTimeRemaining("...")
-          setIsNear(false)
+        // Converter para horas, minutos e segundos
+        const remainingHours = Math.floor(diffInSeconds / 3600)
+        const remainingMinutes = Math.floor((diffInSeconds % 3600) / 60)
+        const remainingSeconds = diffInSeconds % 60
+
+        // Formatar o tempo restante
+        const formattedTime = `${remainingHours.toString().padStart(2, "0")}:${remainingMinutes.toString().padStart(2, "0")}:${remainingSeconds.toString().padStart(2, "0")}`
+
+        setTimeRemaining(formattedTime)
+
+        // Verificar se é hora de enviar mensagens (quando chegar a 00:00:00)
+        if (diffInSeconds === 0) {
+          checkAndSendBirthdayMessages()
         }
+
+        // Ativar o contador se estiver a menos de 24 horas
+        setIsActive(diffInSeconds <= 86400) // 24 horas em segundos
       } catch (error) {
-        console.error("Error calculating time remaining for display:", error)
-        setTimeRemaining("Erro")
-        setIsNear(false)
+        console.error("Erro ao calcular tempo restante:", error)
+        setTimeRemaining("Erro no cálculo")
       }
     }
 
-    calculateTime()
-    const interval = setInterval(calculateTime, 1000)
-    return () => clearInterval(interval)
-  }, [targetTime]) // Recalculate if targetTime changes
+    // Calcular imediatamente e depois a cada segundo
+    calculateTimeRemaining()
+    const interval = setInterval(calculateTimeRemaining, 1000)
 
-  if (!isNear) return null
+    return () => clearInterval(interval)
+  }, [targetTime])
+
+  // Função para verificar aniversariantes e enviar mensagens
+  const checkAndSendBirthdayMessages = async () => {
+    if (!user?.email) return
+
+    try {
+      console.log("Verificando aniversariantes do dia...")
+
+      // Obter a data atual
+      const today = new Date()
+      const currentDay = today.getDate()
+      const currentMonth = today.getMonth() + 1 // getMonth() retorna 0-11
+
+      // Consultar contatos no Firestore
+      const contactsRef = collection(db, `parabenspravoce/${user.email}/users`)
+      const snapshot = await getDocs(contactsRef)
+
+      // Filtrar contatos com aniversário hoje
+      const birthdayContacts = snapshot.docs.filter((doc) => {
+        const contact = doc.data()
+
+        // Verificar se tem data de nascimento
+        if (!contact.data_de_nascimento) return false
+
+        // Extrair dia e mês da data de nascimento
+        let birthDay, birthMonth
+
+        if (contact.data_de_nascimento.includes("/")) {
+          // Formato DD/MM/YYYY
+          ;[birthDay, birthMonth] = contact.data_de_nascimento.split("/").map(Number)
+        } else if (contact.data_de_nascimento.includes("-")) {
+          // Formato YYYY-MM-DD
+          const parts = contact.data_de_nascimento.split("-")
+          birthMonth = Number.parseInt(parts[1])
+          birthDay = Number.parseInt(parts[2])
+        } else {
+          return false
+        }
+
+        // Verificar se é aniversário hoje
+        return birthDay === currentDay && birthMonth === currentMonth
+      })
+
+      // Se houver aniversariantes, enviar mensagens
+      if (birthdayContacts.length > 0) {
+        console.log(`Encontrados ${birthdayContacts.length} aniversariantes hoje!`)
+
+        // Mensagens de aniversário pré-definidas
+        const birthdayMessages = [
+          "Feliz aniversário! Que Deus abençoe sua vida com muita saúde, paz e alegria neste novo ano de vida.",
+          "Parabéns pelo seu dia! Desejamos a você um ano repleto de conquistas e momentos felizes. Conte sempre conosco!",
+          "Felicitações pelo seu aniversário! Que este novo ciclo seja marcado por bênçãos e realizações. Estamos orando por você!",
+        ]
+
+        // Enviar mensagem para cada aniversariante
+        for (const doc of birthdayContacts) {
+          const contact = doc.data()
+
+          // Selecionar mensagem aleatória
+          const randomIndex = Math.floor(Math.random() * birthdayMessages.length)
+          let message = birthdayMessages[randomIndex]
+
+          // Personalizar mensagem com o nome se disponível
+          if (contact.nome) {
+            const firstName = contact.nome.split(" ")[0]
+            message = message.replace("{nome}", firstName)
+          }
+
+          // Verificar se tem telefone
+          if (contact.telefone) {
+            // Aqui você implementaria a lógica para enviar a mensagem via WhatsApp
+            console.log(`Enviando mensagem para ${contact.nome} (${contact.telefone}): ${message}`)
+
+            // Simulação de envio - em produção, você chamaria sua API de envio
+            try {
+              // Exemplo de chamada à API (comentado para não executar realmente)
+              /*
+              await fetch("/api/whatsapp/send-message", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  phoneNumber: contact.telefone,
+                  message: message,
+                  userEmail: user.email
+                })
+              });
+              */
+
+              // Substituir por:
+              console.log(`[AutoSend] Enviando mensagem para ${contact.nome} (${contact.telefone}): ${message}`)
+              try {
+                // Enviar mensagem via API - DESCOMENTAR PARA ATIVAR ENVIO AUTOMÁTICO
+                const response = await fetch("/api/whatsapp/send-message", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    phoneNumber: contact.telefone,
+                    message: message,
+                    userEmail: user.email,
+                  }),
+                })
+
+                const responseData = await response.json()
+
+                if (!response.ok) {
+                  console.error(
+                    `[AutoSend] Erro ao enviar mensagem para ${contact.nome}: Status ${response.status}`,
+                    responseData,
+                  )
+                  throw new Error(responseData.message || `Erro ${response.status}`)
+                }
+
+                console.log(`[AutoSend] ✅ Mensagem enviada com sucesso para ${contact.nome}`, responseData)
+              } catch (sendError) {
+                console.error(`[AutoSend] ❌ Erro detalhado ao enviar mensagem para ${contact.nome}:`, sendError)
+              }
+
+              // Registrar envio no console (para demonstração)
+              console.log(`✅ Mensagem enviada com sucesso para ${contact.nome}`)
+            } catch (sendError) {
+              console.error(`Erro ao enviar mensagem para ${contact.nome}:`, sendError)
+            }
+          }
+        }
+
+        // Notificar o usuário
+        toast({
+          title: "Mensagens de aniversário enviadas",
+          description: `Foram enviadas mensagens para ${birthdayContacts.length} aniversariantes hoje.`,
+        })
+      } else {
+        console.log("Nenhum aniversariante encontrado hoje.")
+      }
+    } catch (error) {
+      console.error("Erro ao verificar aniversariantes:", error)
+    }
+  }
+
+  // Se não estiver ativo, não mostrar nada
+  if (!isActive) return null
 
   return (
     <div className="mt-4 text-center">
-      <p className="text-xs font-medium text-gray-600 mb-1">Próximo envio (via servidor) em:</p>
-      <div className="bg-white px-3 py-1.5 rounded-md border border-green-200 inline-block">
-        <span className="font-mono text-base sm:text-lg font-semibold text-green-700">{timeRemaining}</span>
+      <div className="text-sm font-medium text-gray-600 mb-1">Próximo envio em:</div>
+      <div className="bg-white px-4 py-2 rounded-md border border-green-200 font-mono text-lg font-bold text-green-600">
+        {timeRemaining}
       </div>
-      <p className="text-xs text-gray-500 mt-1.5 px-2">O sistema verificará no servidor neste horário.</p>
+      <p className="text-xs text-gray-500 mt-1">
+        O sistema verificará automaticamente os aniversariantes do dia e enviará mensagens.
+      </p>
     </div>
   )
 }

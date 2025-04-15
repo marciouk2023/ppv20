@@ -1,68 +1,35 @@
-import { type NextRequest, NextResponse } from "next/server"
-import https from "https"
+import { NextResponse } from "next/server"
 
-export async function POST(request: NextRequest) {
+export async function GET(request: Request, { params }: { params: { sessionId: string } }) {
   try {
-    const body = await request.json()
-    const { userEmail } = body
+    const sessionId = params.sessionId
 
-    console.log(`[API] Creating or retrieving session for user: ${userEmail}`)
+    // Simular um atraso de rede
+    await new Promise((resolve) => setTimeout(resolve, 800))
 
-    // Criar um agente HTTPS que ignora erros de certificado
-    const agent = new https.Agent({
-      rejectUnauthorized: false,
-    })
+    // Simular status da sessão
+    // Para demonstração, vamos usar um número aleatório para simular diferentes estados
+    const random = Math.random()
+    let status = "STARTING"
 
-    // Tentar obter sessão existente ou criar nova na API WAHA
-    const sessionResponse = await fetch("https://api.parabenspravoce.com/api/sessions", {
-      method: "GET",
-      // @ts-ignore
-      agent,
-      headers: {
-        "Content-Type": "application/json",
-        "X-Api-Key": "Cara2211Msa2013+ou-6",
-      },
-    })
-
-    const sessions = await sessionResponse.json()
-
-    // Verificar se já existe uma sessão
-    let sessionId = ""
-    if (sessions && sessions.length > 0) {
-      sessionId = sessions[0].id
-      console.log(`[API] Found existing session: ${sessionId}`)
+    if (random < 0.2) {
+      status = "STARTING"
+    } else if (random < 0.3) {
+      status = "DISCONNECTED"
+    } else if (random < 0.4) {
+      status = "STOPPED"
     } else {
-      // Criar nova sessão
-      const createResponse = await fetch("https://api.parabenspravoce.com/api/sessions", {
-        method: "POST",
-        // @ts-ignore
-        agent,
-        headers: {
-          "Content-Type": "application/json",
-          "X-Api-Key": "Cara2211Msa2013+ou-6",
-        },
-        body: JSON.stringify({
-          name: "default",
-        }),
-      })
-
-      const newSession = await createResponse.json()
-      sessionId = newSession.id
-      console.log(`[API] Created new session: ${sessionId}`)
+      status = "CONNECTED"
     }
 
     return NextResponse.json({
       success: true,
-      sessionId: sessionId,
+      name: sessionId,
+      status: status,
+      timestamp: new Date().toISOString(),
     })
   } catch (error) {
-    console.error("[API] Error managing session:", error)
-    return NextResponse.json(
-      {
-        success: false,
-        message: `Erro ao gerenciar sessão: ${error instanceof Error ? error.message : "Erro desconhecido"}`,
-      },
-      { status: 500 },
-    )
+    console.error("Erro ao verificar status da sessão:", error)
+    return NextResponse.json({ success: false, error: "Falha ao verificar status da sessão" }, { status: 500 })
   }
 }
