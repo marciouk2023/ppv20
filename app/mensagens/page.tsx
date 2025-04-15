@@ -71,8 +71,8 @@ export default function MensagensPage() {
     setMensagens(mensagens.map((msg) => (msg.id === editingMessage.id ? { ...msg, conteudo: editedContent } : msg)))
     setIsEditModalOpen(false)
     toast({
-      title: "Mensagem atualizada",
-      description: "Seu modelo de mensagem foi atualizado com sucesso!",
+      title: "Mensagem salva",
+      description: "Seu modelo de mensagem foi salvo com sucesso!",
     })
   }
 
@@ -301,7 +301,6 @@ export default function MensagensPage() {
 
                 <TabsContent value="audio" className="pt-4">
                   <AudioRecorderConverter
-                    apiUrl={process.env.NEXT_PUBLIC_WAHA_API_URL || ""}
                     phoneNumber={phoneNumber}
                     userEmail={user?.email || ""}
                     onSuccess={handleAudioSuccess}
