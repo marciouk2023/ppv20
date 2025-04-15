@@ -25,8 +25,8 @@ export async function GET(
   const wahaSessionName = sessionName.startsWith("session_") ? sessionName.substring(8) : sessionName
 
   try {
-    // Log usa o nome SEM prefixo agora
-    console.log(`[API /status] Verificando status para sessão WAHA: ${wahaSessionName}`)
+    // Log detalhado para debug
+    console.log(`[API /status] Verificando status para sessão original: ${sessionName}, WAHA: ${wahaSessionName}`)
 
     // <<< CORRIGIDO: Usa wahaSessionName (SEM prefixo) na URL da API WAHA
     const wahaApiUrl = `${WAHA_CONFIG.API_URL}/api/sessions/${wahaSessionName}`
@@ -47,6 +47,7 @@ export async function GET(
     })
 
     const responseText = await response.text()
+    console.log(`[API /status] Resposta bruta da API WAHA (${response.status}): ${responseText.substring(0, 100)}...`)
 
     // Resposta 404 AGORA significa que a sessão SEM prefixo não foi encontrada
     if (!response.ok) {
@@ -62,9 +63,22 @@ export async function GET(
       return NextResponse.json({ success: false, message: errorMessage }, { status: response.status })
     }
 
-    const data = JSON.parse(responseText)
+    let data
+    try {
+      data = JSON.parse(responseText)
+    } catch (e) {
+      console.error(`[API /status] Erro ao parsear resposta JSON: ${e}. Texto: ${responseText}`)
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Erro ao parsear resposta da API WAHA",
+        },
+        { status: 500 },
+      )
+    }
+
     console.log(
-      `[API /status] Status obtido com sucesso (${response.status}) para sessão '${wahaSessionName}'. Estado: ${data?.status}`,
+      `[API /status] Status obtido com sucesso (${response.status}) para sessão '${wahaSessionName}'. Estado: ${data?.status || data?.engine?.state || "desconhecido"}`,
     )
 
     // Mapeia o status da API WAHA para o formato esperado pelo frontend
@@ -89,6 +103,8 @@ export async function GET(
       connected: connected,
       authenticated: authenticated,
       status: status,
+      originalStatus: data?.status, // Adicionado para debug
+      engineState: data?.engine?.state, // Adicionado para debug
       ...data,
     })
   } catch (error) {
