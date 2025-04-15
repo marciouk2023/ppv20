@@ -15,13 +15,13 @@ export async function GET(
     return NextResponse.json({ success: false, message: "Configuração interna incompleta." }, { status: 500 })
   }
 
-  const sessionName = params.sessionName // Nome completo vindo da URL
+  const sessionName = params.sessionName // Nome completo vindo da URL (ex: session_123)
   if (!sessionName) {
     console.warn("[API /status] Requisição sem sessionName na URL.")
     return NextResponse.json({ success: false, message: "sessionName obrigatório na URL." }, { status: 400 })
   }
 
-  // <<< CORRIGIDO: Remove o prefixo 'session_' SE ele existir
+  // Remove o prefixo 'session_' SE ele existir para usar na URL da API WAHA
   const wahaSessionName = sessionName.startsWith("session_") ? sessionName.substring(8) : sessionName
 
   try {
@@ -29,7 +29,7 @@ export async function GET(
     console.log(`[API /status] Verificando status para sessão WAHA: ${wahaSessionName}`)
 
     // <<< CORRIGIDO: Usa wahaSessionName (SEM prefixo) na URL da API WAHA
-    const wahaApiUrl = `${WAHA_CONFIG.API_URL}/api/${wahaSessionName}`
+    const wahaApiUrl = `${WAHA_CONFIG.API_URL}/api/sessions/${wahaSessionName}`
     console.log(`[API /status] Chamando WAHA API em: GET ${wahaApiUrl}`)
 
     const headers: HeadersInit = {
@@ -67,12 +67,28 @@ export async function GET(
       `[API /status] Status obtido com sucesso (${response.status}) para sessão '${wahaSessionName}'. Estado: ${data?.status}`,
     )
 
-    const currentState = data?.status
+    // Mapeia o status da API WAHA para o formato esperado pelo frontend
+    let connected = false
+    let authenticated = false
+    let status = data?.status || "UNKNOWN" // Default status
+
+    if (data?.engine?.state === "CONNECTED" || data?.status === "authenticated") {
+      connected = true
+      authenticated = true
+      status = "CONNECTED"
+    } else if (data?.status === "SCAN_QR_CODE") {
+      status = "SCAN_QR_CODE"
+    } else if (data?.status === "STARTING") {
+      status = "STARTING"
+    } else if (data?.status === "WORKING") {
+      status = "WORKING"
+    }
+
     return NextResponse.json({
       success: true,
-      connected: currentState === "authenticated",
-      authenticated: currentState === "authenticated",
-      status: currentState,
+      connected: connected,
+      authenticated: authenticated,
+      status: status,
       ...data,
     })
   } catch (error) {
