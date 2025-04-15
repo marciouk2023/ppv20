@@ -8,9 +8,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { useToast } from "@/hooks/use-toast"
 import { Send, Loader2, Gift } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
-import { checkUserSession } from "@/lib/session-manager"
+import { collection, query, where, getDocs, Timestamp, doc, setDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase-config"
-import { doc, updateDoc, arrayUnion, Timestamp } from "firebase/firestore"
 
 interface SendBirthdayMessageProps {
   contactId: string
@@ -68,106 +67,127 @@ export function SendBirthdayMessage({
     }
   }
 
+  // Check if a message was already sent to this contact today
+  const checkIfMessageAlreadySent = async (): Promise<boolean> => {
+    if (!user?.email || !contactId) return false
+
+    try {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+
+      const sentMessagesRef = collection(db, "sent_messages")
+      const q = query(
+        sentMessagesRef,
+        where("userEmail", "==", user.email),
+        where("contactId", "==", contactId),
+        where("timestamp", ">=", Timestamp.fromDate(today)),
+        where("status", "in", ["sent", "sending"]),
+      )
+
+      const snapshot = await getDocs(q)
+      return !snapshot.empty
+    } catch (error) {
+      console.error("Error checking if message was already sent:", error)
+      return false
+    }
+  }
+
+  // Record that a message was sent
+  const recordMessageSent = async (messageContent: string): Promise<string> => {
+    if (!user?.email || !contactId) throw new Error("Missing user email or contact ID")
+
+    try {
+      const today = new Date().toISOString().split("T")[0]
+      const recordId = `manual_birthday_${user.email}_${contactId}_${today}`
+
+      await setDoc(doc(db, "sent_messages", recordId), {
+        messageId: recordId,
+        userEmail: user.email,
+        contactId,
+        contactName,
+        phoneNumber: contactPhone,
+        message: messageContent.substring(0, 100) + (messageContent.length > 100 ? "..." : ""),
+        timestamp: Timestamp.now(),
+        status: "sent",
+        type: "manual_birthday",
+        sentBy: "manual",
+      })
+
+      return recordId
+    } catch (error) {
+      console.error("Error recording message sent:", error)
+      throw error
+    }
+  }
+
   // Enviar mensagem
-  const sendMessage = async () => {
-    if (!contactPhone) {
-      setError("Este contato não possui número de telefone cadastrado.")
-      return
-    }
-
-    if (!user?.email) {
-      setError("Você precisa estar logado para enviar mensagens.")
-      return
-    }
-
+  const handleSendMessage = async () => {
     setIsSending(true)
     setError(null)
 
     try {
-      // Verificar se há uma sessão WhatsApp ativa
-      const sessionInfo = await checkUserSession(user.email)
-
-      if (!sessionInfo.hasSession || !sessionInfo.sessionName) {
-        throw new Error("Nenhuma sessão WhatsApp ativa encontrada. Conecte na página de Configurações.")
+      if (!user?.email) {
+        throw new Error("Você precisa estar logado para enviar mensagens")
       }
 
-      const activeSessionName = sessionInfo.sessionName
-      const apiUrl = process.env.NEXT_PUBLIC_WAHA_API_URL
-
-      if (!apiUrl) {
-        throw new Error("Configuração da URL da API ausente.")
+      // Check if a message was already sent today
+      const alreadySent = await checkIfMessageAlreadySent()
+      if (alreadySent) {
+        toast({
+          title: "Mensagem já enviada",
+          description: `Uma mensagem já foi enviada para ${contactName} hoje.`,
+        })
+        if (onSuccess) onSuccess()
+        return
       }
 
-      // Preparar a mensagem final com substituição de placeholders
       const finalMessage = replacePlaceholders(getCurrentMessage())
 
-      // Preparar payload para a API
-      const payload = {
-        chatId: `${contactPhone.replace(/\D/g, "")}@c.us`,
-        text: finalMessage,
-        session: activeSessionName,
+      // Format phone number
+      let chatId = contactPhone.replace(/\D/g, "")
+      if (!chatId.endsWith("@c.us")) {
+        chatId = `${chatId}@c.us`
       }
 
-      // Enviar mensagem via API
-      const correctedApiUrl = apiUrl.replace(/\/$/, "")
-      const response = await fetch(`${correctedApiUrl}/api/sendText`, {
+      // Call WhatsApp API
+      const wahaApiUrl = process.env.NEXT_PUBLIC_WAHA_API_URL || "https://api.parabenspravoce.com"
+
+      const response = await fetch("/api/whatsapp/send-message", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          phoneNumber: chatId,
+          message: finalMessage,
+          sessionName: "default",
+        }),
       })
 
-      const data = await response.json()
-
       if (!response.ok) {
-        throw new Error(data?.message || `Erro ${response.status} ao enviar mensagem.`)
+        const errorData = await response.json()
+        throw new Error(errorData.message || `Erro ${response.status}`)
       }
 
-      // Registrar mensagem enviada no Firebase
-      await registerMessageInFirebase(finalMessage)
+      // Record the message as sent
+      await recordMessageSent(finalMessage)
 
-      // Notificar sucesso
       toast({
         title: "Mensagem enviada!",
         description: `Mensagem de aniversário enviada para ${contactName}.`,
       })
 
-      // Chamar callback de sucesso
       if (onSuccess) onSuccess()
-    } catch (error) {
-      console.error("Erro ao enviar mensagem de aniversário:", error)
-      setError(error instanceof Error ? error.message : "Erro desconhecido ao enviar mensagem.")
-
+    } catch (err: any) {
+      console.error("Erro ao enviar mensagem de aniversário:", err)
+      setError(err.message || "Erro desconhecido ao enviar mensagem.")
       toast({
         title: "Erro ao enviar",
-        description: error instanceof Error ? error.message : "Erro desconhecido ao enviar mensagem.",
+        description: err.message || "Erro desconhecido ao enviar mensagem.",
         variant: "destructive",
       })
     } finally {
       setIsSending(false)
-    }
-  }
-
-  // Registrar mensagem enviada no Firebase
-  const registerMessageInFirebase = async (message: string) => {
-    if (!user?.email || !contactId) return
-
-    try {
-      const contactRef = doc(db, `parabenspravoce/${user.email}/users`, contactId)
-
-      // Adicionar mensagem ao histórico do contato
-      await updateDoc(contactRef, {
-        messageHistory: arrayUnion({
-          message,
-          type: "birthday",
-          sentAt: Timestamp.now(),
-          sentBy: user.email,
-        }),
-        lastMessageSent: Timestamp.now(),
-      })
-    } catch (error) {
-      console.error("Erro ao registrar mensagem no Firebase:", error)
     }
   }
 
@@ -244,7 +264,7 @@ export function SendBirthdayMessage({
         </Button>
         <Button
           className="bg-green-500 hover:bg-green-600"
-          onClick={sendMessage}
+          onClick={handleSendMessage}
           disabled={isSending || (messageType === "custom" && !customMessage)}
         >
           {isSending ? (

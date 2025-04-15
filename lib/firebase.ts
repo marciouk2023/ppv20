@@ -1,33 +1,20 @@
-import { initializeApp } from "firebase/app"
-import { getStorage } from "firebase/storage"
-import { getAuth, signInAnonymously } from "firebase/auth"
+import { initializeApp, getApps } from "firebase/app"
+import { getFirestore } from "firebase/firestore"
 
-// Configuração do Firebase
+// Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyAhVRy9BU62M6kpB_y9NoQqaU_y-AePG3A",
-  authDomain: "mmlj---new-day-church.firebaseapp.com",
-  projectId: "mmlj---new-day-church",
-  storageBucket: "mmlj---new-day-church.appspot.com", // Corrigido para o domínio correto
-  messagingSenderId: "1018979121797",
-  appId: "1:1018979121797:web:ef5de75f9a6d46cfda07ec",
-  measurementId: "G-5DK2QQ0RMH",
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 }
 
-// Inicializar Firebase
-const app = initializeApp(firebaseConfig)
-const storage = getStorage(app)
-const auth = getAuth(app)
+// Initialize Firebase only if it hasn't been initialized already
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0]
 
-// Função para autenticar anonimamente
-const authenticateAnonymously = async () => {
-  try {
-    const userCredential = await signInAnonymously(auth)
-    console.log("Autenticado anonimamente com sucesso:", userCredential.user.uid)
-    return userCredential.user
-  } catch (error) {
-    console.error("Erro na autenticação anônima:", error)
-    throw error
-  }
-}
+// Initialize Firestore
+const db = getFirestore(app)
 
-export { app, storage, auth, authenticateAnonymously }
+export { app, db }

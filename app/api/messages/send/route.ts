@@ -1,9 +1,10 @@
-// app/api/messages/send/route.ts
-// Arquivo renomeado de app/api/whatsapp/send-message/route.ts para app/api/messages/send/route.ts
+// Modificação no arquivo app/api/messages/send/route.ts (ou app/api/whatsapp/send-message/route.ts)
 
 import { type NextRequest, NextResponse } from "next/server"
 import https from "https"
 import { WAHA_CONFIG } from "@/lib/wahaConfig"
+import { collection, query, where, getDocs, addDoc, Timestamp } from "firebase/firestore"
+import { db } from "@/lib/firebase-config"
 
 export async function POST(request: NextRequest) {
   const agent = new https.Agent({ rejectUnauthorized: false })
@@ -15,7 +16,47 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { phoneNumber, message, sessionName } = body
+    const { phoneNumber, message, sessionName, messageId } = body
+
+    // NOVO: Verificar ID da mensagem para deduplicação
+    if (messageId) {
+      // Verificar se esta mensagem já foi enviada nas últimas 24 horas
+      try {
+        const recentMessagesRef = collection(db, "recent_messages")
+        const oneDayAgo = new Date()
+        oneDayAgo.setHours(oneDayAgo.getHours() - 24)
+
+        const q = query(
+          recentMessagesRef,
+          where("messageId", "==", messageId),
+          where("timestamp", ">=", Timestamp.fromDate(oneDayAgo)),
+        )
+
+        const snapshot = await getDocs(q)
+        if (!snapshot.empty) {
+          console.log(`[API send-message] Mensagem duplicada detectada com ID: ${messageId}. Ignorando.`)
+          return NextResponse.json({
+            success: true,
+            message: "Mensagem já enviada anteriormente (deduplicada)",
+            duplicated: true,
+          })
+        }
+
+        // Registrar esta mensagem para deduplicação futura
+        await addDoc(recentMessagesRef, {
+          messageId,
+          phoneNumber,
+          message: message.substring(0, 50) + (message.length > 50 ? "..." : ""),
+          timestamp: Timestamp.now(),
+        })
+      } catch (dedupeError) {
+        // Se houver erro na deduplicação, registrar mas continuar com o envio
+        console.warn(`[API send-message] Erro ao verificar duplicação: ${dedupeError}. Continuando com o envio.`)
+      }
+    } else {
+      // Se não houver messageId, gerar um aviso
+      console.warn("[API send-message] Requisição sem messageId. Recomendado usar messageId para evitar duplicações.")
+    }
 
     if (!phoneNumber || !message || !sessionName) {
       // Validação básica dos campos recebidos
