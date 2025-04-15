@@ -171,16 +171,23 @@ export async function checkUserSession(userEmail: string): Promise<{
   return await getUserSession(userEmail)
 }
 
-/**
- * Obter a URL correta para verificar o status de uma sessão
- * @param sessionName Nome da sessão
- * @returns URL completa para o endpoint de status
- */
+// Modifique a função getSessionStatusURL para remover o prefixo "session_"
 export function getSessionStatusURL(sessionName: string): string {
   const baseURL = process.env.NEXT_PUBLIC_VERCEL_URL
     ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
     : "https://api.parabenspravoce.com"
 
-  // Caminho correto: /api/sessions/[sessionName]/status
-  return `${baseURL}/api/sessions/${sessionName}/status`
+  // Remove o prefixo 'session_' se existir
+  const wahaSessionName = sessionName.startsWith("session_") ? sessionName.substring(8) : sessionName
+
+  // Caminho correto: /api/sessions/[sessionName]/status (sem o prefixo session_)
+  return `${baseURL}/api/sessions/${wahaSessionName}/status`
+}
+
+// Modifique a função generateLocalUniqueSessionName no arquivo session-manager.ts (se existir)
+// ou em qualquer outro lugar onde essa função esteja definida
+function generateLocalUniqueSessionName(): string {
+  const timestamp = Date.now()
+  const random = Math.floor(Math.random() * 10000)
+  return `${timestamp}_${random}` // Removido o prefixo "session_"
 }

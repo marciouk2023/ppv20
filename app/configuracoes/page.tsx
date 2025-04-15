@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Sidebar } from "@/components/sidebar"
 import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/contexts/auth-context"
-import { saveUserSession, updateSessionStatus, checkUserSession, getSessionStatusURL } from "@/lib/session-manager"
+import { saveUserSession, updateSessionStatus, checkUserSession } from "@/lib/session-manager"
 import { doc, getDoc, setDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase-config"
 import { differenceInSeconds } from "date-fns"
@@ -49,7 +49,11 @@ function ConnectionStatusBadge({
           // If the user has a session, check the status of that specific session
           try {
             // Use VERCEL_URL if available, otherwise fallback
-            const sessionEndpoint = getSessionStatusURL(userSession.sessionName)
+            const apiUrl = process.env.NEXT_PUBLIC_VERCEL_URL
+              ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
+              : "https://api.parabenspravoce.com" // Fallback or local URL
+
+            const sessionEndpoint = `${apiUrl}/api/sessions/${userSession.sessionName}/status`
             // console.log(`[StatusBadge] Checking endpoint: ${sessionEndpoint}`); // Debug URL
             const response = await fetch(sessionEndpoint, {
               cache: "no-store", // Ensure fresh data
@@ -328,9 +332,15 @@ export default function ConfiguracoesPage() {
       return
     }
 
+    // Gere um nome de sessão sem o prefixo "session_"
     let tempSessionName = sessionName // Use existing if available, else generate
     if (!tempSessionName) {
-      tempSessionName = generateLocalUniqueSessionName()
+      const timestamp = Date.now()
+      const random = Math.floor(Math.random() * 10000)
+      tempSessionName = `${timestamp}_${random}` // Removido o prefixo "session_"
+    } else if (tempSessionName.startsWith("session_")) {
+      // Se já tiver o prefixo, remova-o
+      tempSessionName = tempSessionName.substring(8)
     }
 
     // Stop any existing status check
@@ -354,7 +364,10 @@ export default function ConfiguracoesPage() {
       const startSessionResponse = await fetch(`${apiUrl}/api/whatsapp/generate-qr`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionName: tempSessionName, userEmail: user.email }),
+        body: JSON.stringify({
+          sessionName: tempSessionName, // Sem o prefixo "session_"
+          userEmail: user.email,
+        }),
         cache: "no-store",
       })
 
@@ -446,7 +459,13 @@ export default function ConfiguracoesPage() {
         const apiUrl = process.env.NEXT_PUBLIC_VERCEL_URL
           ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
           : "https://api.parabenspravoce.com" // Fallback or local URL
-        const statusEndpoint = `${apiUrl}/api/sessions/${sessionNameToCheck}/status`
+
+        // Remove o prefixo 'session_' se existir
+        const wahaSessionName = sessionNameToCheck.startsWith("session_")
+          ? sessionNameToCheck.substring(8)
+          : sessionNameToCheck
+
+        const statusEndpoint = `${apiUrl}/api/sessions/${wahaSessionName}/status`
         const statusResponse = await fetch(statusEndpoint, { cache: "no-store" })
 
         // Handle non-JSON responses gracefully
