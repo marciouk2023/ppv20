@@ -60,7 +60,8 @@
     "zod": "^3.24.1",
     "https": "latest",
     "firebase": "latest",
-    "uuid": "latest"
+    "uuid": "latest",
+    "axios": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",
