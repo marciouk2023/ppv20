@@ -210,7 +210,7 @@ export default function AgendamentoPage() {
       console.error("Erro ao carregar contatos do Firebase:", error)
       toast({
         title: "Erro ao carregar contatos",
-        description: "Não foi possível carregar os contatos do Firebase. Verifique sua conexão.",
+        description: "Não foi possível carregar os contatos do Firebase. Verifique sua conex��o.",
         variant: "destructive",
       })
     } finally {
