@@ -1,3 +1,4 @@
+// Caminho: app/configuracoes/page.tsx
 "use client"
 
 import { useState, useEffect } from "react"
@@ -49,12 +50,10 @@ function ConnectionStatusBadge({
           // If the user has a session, check the status of that specific session
           try {
             // Use VERCEL_URL if available, otherwise fallback
-            const apiUrl = process.env.NEXT_PUBLIC_VERCEL_URL
-              ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-              : "https://api.parabenspravoce.com" // Fallback or local URL
+            const apiUrl = "/api" // Sempre use a API local, que fará o proxy corretamente
 
-            const sessionEndpoint = `${apiUrl}/api/sessions/${userSession.sessionName}/status`
-            // console.log(`[StatusBadge] Checking endpoint: ${sessionEndpoint}`); // Debug URL
+            const sessionEndpoint = `${apiUrl}/api/whatsapp/sessions/${userSession.sessionName}/status`
+            console.log(`[StatusBadge] Checking endpoint: ${sessionEndpoint}`) // Debug URL
             const response = await fetch(sessionEndpoint, {
               cache: "no-store", // Ensure fresh data
             })
@@ -68,7 +67,6 @@ function ConnectionStatusBadge({
               if (
                 currentState === "WORKING" ||
                 currentState === "CONNECTED" ||
-                currentState === "AUTHENTICATED" ||
                 data.connected === true ||
                 data.authenticated === true
               ) {
@@ -156,6 +154,7 @@ export default function ConfiguracoesPage() {
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const { toast } = useToast()
   const { user } = useAuth()
+  const [wahaStatus, setWahaStatus] = useState<string | null>(null)
 
   // State to store user session info fetched from Firestore/API
   const [userSessionInfo, setUserSessionInfo] = useState<{
@@ -210,7 +209,7 @@ export default function ConfiguracoesPage() {
   // Check and update connection status
   const checkAndUpdateSessionStatus = async () => {
     if (!user?.email) {
-      if (connectionStatus !== "disconnected") setConnectionStatus("disconnected")
+      setConnectionStatus("disconnected")
       setUserSessionInfo({ hasSession: false, sessionName: null, status: null })
       return
     }
@@ -229,60 +228,53 @@ export default function ConfiguracoesPage() {
           !sessionInfo.status
         ) {
           try {
-            const apiUrl = process.env.NEXT_PUBLIC_VERCEL_URL
-              ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-              : "https://api.parabenspravoce.com" // Fallback or local URL
-            const statusEndpoint = `${apiUrl}/api/sessions/${sessionInfo.sessionName}/status`
+            const apiUrl = "/api" // Sempre use a API local, que fará o proxy corretamente
+            const statusEndpoint = `${apiUrl}/api/whatsapp/sessions/${sessionInfo.sessionName}/status`
+            console.log(`[StatusBadge] Checking endpoint: ${statusEndpoint}`) // Debug URL
             const response = await fetch(statusEndpoint, { cache: "no-store" })
 
             if (response.ok) {
               const data = await response.json()
               const currentState = data.state || data.status
+              setWahaStatus(currentState)
+
               if (
                 currentState === "WORKING" ||
                 currentState === "CONNECTED" ||
-                currentState === "AUTHENTICATED" ||
                 data.connected === true ||
                 data.authenticated === true
               ) {
-                if (connectionStatus !== "connected") {
-                  // console.log(`[SessionCheck] Updating status to connected for session ${sessionInfo.sessionName}`);
-                  setConnectionStatus("connected")
-                  setLastConnection(new Date().toLocaleString())
-                  setQrCode(null)
-                  setErrorMessage(null)
+                if (connectionStatus !== "connected") setConnectionStatus("connected")
+                // setLastConnection(new Date().toLocaleString()) // Maybe update less frequently
+              } else if (currentState === "SCAN_QR_CODE" || currentState === "STARTING" || currentState === "PAIRING") {
+                if (status === "disconnected") {
+                  setConnectionStatus("connecting")
                 }
               } else {
-                if (connectionStatus === "connected") {
-                  // console.log(`[SessionCheck] API shows session ${sessionInfo.sessionName} not connected (${currentState}). Updating status.`);
+                if (status === "connected") {
                   setConnectionStatus("disconnected")
-                } else if (currentState === "SCAN_QR_CODE" && connectionStatus === "disconnected") {
-                  setConnectionStatus("connecting") // If API says scan QR, reflect it
                 }
               }
+              return
             } else {
-              if (connectionStatus === "connected") {
-                // console.warn(`[SessionCheck] API error (${response.status}) checking session ${sessionInfo.sessionName}. Assuming disconnected.`);
-                setConnectionStatus("disconnected")
-              }
+              console.warn(
+                `[StatusBadge] Non-OK response (${response.status}) checking session ${sessionInfo.sessionName}`,
+              )
+              if (status === "connected") setConnectionStatus("disconnected")
             }
           } catch (apiError) {
-            console.error(`[SessionCheck] Error calling API for session ${sessionInfo.sessionName}:`, apiError)
-            if (connectionStatus === "connected") {
-              setConnectionStatus("disconnected")
-            }
+            console.error(`[StatusBadge] Error fetching session status for ${sessionInfo.sessionName}:`, apiError)
+            if (status === "connected") setConnectionStatus("disconnected")
           }
         } else {
           // Firestore status is explicitly not connected (e.g., 'disconnected', 'error')
           if (connectionStatus !== "disconnected") {
-            // console.log(`[SessionCheck] Firestore status is ${sessionInfo.status}. Updating status to disconnected.`);
             setConnectionStatus("disconnected")
           }
         }
       } else {
         // Firestore says no session
         if (connectionStatus !== "disconnected") {
-          // console.log("[SessionCheck] Firestore indicates no active session. Updating status to disconnected.");
           setConnectionStatus("disconnected")
         }
         setSessionName(null) // Clear session name if no session exists
@@ -322,7 +314,7 @@ export default function ConfiguracoesPage() {
   function generateLocalUniqueSessionName(): string {
     const timestamp = Date.now()
     const random = Math.floor(Math.random() * 10000)
-    return `session_${timestamp}_${random}`
+    return `${timestamp}_${random}` // Removido o prefixo "session_"
   }
 
   // Generate QR Code
@@ -343,6 +335,8 @@ export default function ConfiguracoesPage() {
       tempSessionName = tempSessionName.substring(8)
     }
 
+    console.log(`[Frontend] generateQRCode - Session name: ${tempSessionName}`)
+
     // Stop any existing status check
     if (statusCheckInterval) {
       clearInterval(statusCheckInterval)
@@ -356,9 +350,7 @@ export default function ConfiguracoesPage() {
     setSessionName(tempSessionName) // Set the name we'll use
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_VERCEL_URL
-        ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-        : "https://api.parabenspravoce.com" // Fallback or local URL
+      const apiUrl = "/api" // Sempre use a API local, que fará o proxy corretamente
 
       // Call API to start session (might return QR directly or require polling)
       const startSessionResponse = await fetch(`${apiUrl}/api/whatsapp/generate-qr`, {
@@ -456,16 +448,15 @@ export default function ConfiguracoesPage() {
       attemptCount++
 
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_VERCEL_URL
-          ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-          : "https://api.parabenspravoce.com" // Fallback or local URL
+        const apiUrl = "/api" // Sempre use a API local, que fará o proxy corretamente
 
         // Remove o prefixo 'session_' se existir
         const wahaSessionName = sessionNameToCheck.startsWith("session_")
           ? sessionNameToCheck.substring(8)
           : sessionNameToCheck
 
-        const statusEndpoint = `${apiUrl}/api/sessions/${wahaSessionName}/status`
+        const statusEndpoint = `${apiUrl}/api/whatsapp/sessions/${wahaSessionName}/status`
+        console.log(`[StatusCheck] Checking endpoint: ${statusEndpoint}`)
         const statusResponse = await fetch(statusEndpoint, { cache: "no-store" })
 
         // Handle non-JSON responses gracefully

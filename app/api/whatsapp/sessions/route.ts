@@ -46,7 +46,8 @@ export async function POST(request: NextRequest) {
       name: wahaSessionNameToCreate, // Envia o nome SEM prefixo para o WAHA criar/iniciar
     }
 
-    const wahaEndpoint = `${WAHA_API_URL}/api/sessions/start`
+    // Certifique-se de que a URL está correta
+    const wahaEndpoint = `${WAHA_API_URL}/api/sessions/${wahaSessionNameToCreate}`
     console.log(`[API /sessions] Chamando WAHA: POST ${wahaEndpoint} com body:`, JSON.stringify(requestBody))
 
     const wahaResponse = await fetch(wahaEndpoint, {
