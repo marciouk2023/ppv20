@@ -1,13 +1,16 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Edit, Loader2 } from "lucide-react"
+import { Edit, Send, Loader2, MessageSquare, Mic, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Sidebar } from "@/components/sidebar"
+import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { AudioRecorderConverter } from "@/components/audio-recorder-converter"
 import {
   Dialog,
   DialogContent,
@@ -18,12 +21,39 @@ import {
 } from "@/components/ui/dialog"
 import { useAuth } from "@/contexts/auth-context"
 import { useRouter } from "next/navigation"
-import { collection, doc, getDocs, updateDoc, addDoc, deleteDoc } from "firebase/firestore"
-import { db } from "@/lib/firebase-config"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { checkUserSession } from "@/lib/session-manager" // Certifique-se que o caminho está correto
+import { db } from "@/lib/firebase"
+import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore"
+
+// Sample data for messages
+const mensagensIniciais = [
+  {
+    id: 1,
+    titulo: "Mensagem 1",
+    conteudo: "Feliz aniversário! Que Deus abençoe sua vida com muita saúde, paz e alegria neste novo ano de vida.",
+  },
+  {
+    id: 2,
+    titulo: "Mensagem 2",
+    conteudo:
+      "Parabéns pelo seu dia! Desejamos a você um ano repleto de conquistas e momentos felizes. Conte sempre conosco!",
+  },
+  {
+    id: 3,
+    titulo: "Mensagem 3",
+    conteudo:
+      "Felicitações pelo seu aniversário! Que este novo ciclo seja marcado por bênçãos e realizações. Estamos orando por você!",
+  },
+]
 
 export default function MensagensPage() {
-  const [mensagens, setMensagens] = useState([])
+  const [mensagens, setMensagens] = useState(mensagensIniciais)
+  const [phoneNumber, setPhoneNumber] = useState("447897274321")
+  const [message, setMessage] = useState("")
   const [isSending, setIsSending] = useState(false)
+  const [activeTab, setActiveTab] = useState("texto")
+  const [whatsappError, setWhatsappError] = useState<string | null>(null)
   const { toast } = useToast()
   const { user } = useAuth()
   const router = useRouter()
@@ -32,147 +62,83 @@ export default function MensagensPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [editedContent, setEditedContent] = useState("")
   const [isSavingMessage, setIsSavingMessage] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
 
-  // Função para carregar mensagens do Firebase
-  const loadMessages = async () => {
-    if (!user?.email) return
-
-    try {
-      setIsLoading(true)
-
-      // Referência para a coleção de mensagens do usuário
-      const messagesRef = collection(db, `parabenspravoce/${user?.email}/messages`)
-      const snapshot = await getDocs(messagesRef)
-
-      if (snapshot.empty) {
-        // Se não houver mensagens, criar mensagens padrão
-        await createDefaultMessages()
-        return
-      }
-
-      // Mapear documentos para o formato esperado pelo componente
-      const loadedMessages = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        titulo: doc.data().title || `Mensagem ${doc.id}`,
-        conteudo: doc.data().content || "",
-        type: doc.data().type || "birthday",
-      }))
-
-      setMensagens(loadedMessages)
-    } catch (error) {
-      console.error("Erro ao carregar mensagens:", error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível carregar as mensagens do Firebase.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Função para criar mensagens padrão no Firebase
-  const createDefaultMessages = async () => {
-    if (!user?.email) return
-
-    try {
-      const messagesRef = collection(db, `parabenspravoce/${user?.email}/messages`)
-
-      const defaultMessages = [
-        {
-          title: "Mensagem 1",
-          content:
-            "Feliz aniversário! Que Deus abençoe sua vida com muita saúde, paz e alegria neste novo ano de vida.",
-          type: "birthday",
-        },
-        {
-          title: "Mensagem 2",
-          content:
-            "Parabéns pelo seu dia! Desejamos a você um ano repleto de conquistas e momentos felizes. Conte sempre conosco!",
-          type: "birthday",
-        },
-        {
-          title: "Mensagem 3",
-          content:
-            "Felicitações pelo seu aniversário! Que este novo ciclo seja marcado por bênçãos e realizações. Estamos orando por você!",
-          type: "birthday",
-        },
-      ]
-
-      // Adicionar cada mensagem padrão ao Firebase
-      const addedMessages = []
-      for (const message of defaultMessages) {
-        const docRef = await addDoc(messagesRef, {
-          title: message.title,
-          content: message.content,
-          type: message.type,
-          createdAt: new Date(),
-        })
-
-        addedMessages.push({
-          id: docRef.id,
-          titulo: message.title,
-          conteudo: message.content,
-          type: message.type,
-        })
-      }
-
-      setMensagens(addedMessages)
-
-      toast({
-        title: "Mensagens criadas",
-        description: "Mensagens padrão foram criadas com sucesso.",
-      })
-    } catch (error) {
-      console.error("Erro ao criar mensagens padrão:", error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível criar as mensagens padrão.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  // Função para editar mensagem
   const handleEditMessage = (mensagem: any) => {
     setEditingMessage(mensagem)
     setEditedContent(mensagem.conteudo)
     setIsEditModalOpen(true)
   }
 
-  // Função para salvar mensagem editada no Firebase
+  // Function to load message templates from Firebase
+  const loadMessageTemplates = async () => {
+    if (!user?.email) return
+
+    try {
+      const templatesDocRef = doc(db, `parabenspravoce/${user.email}/settings`, "messageTemplates")
+      const templatesDoc = await getDoc(templatesDocRef)
+
+      if (templatesDoc.exists()) {
+        const data = templatesDoc.data()
+        if (data.templates && Array.isArray(data.templates)) {
+          setMensagens(data.templates)
+        } else {
+          // If templates array doesn't exist, save the default templates
+          await setDoc(templatesDocRef, {
+            templates: mensagens,
+            updatedAt: Timestamp.now(),
+          })
+        }
+      } else {
+        // If document doesn't exist, create it with default templates
+        await setDoc(templatesDocRef, {
+          templates: mensagens,
+          updatedAt: Timestamp.now(),
+        })
+      }
+    } catch (error) {
+      console.error("Error loading message templates:", error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar os modelos de mensagem.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Function to save edited message
   const handleSaveMessage = async () => {
-    if (!editingMessage || !user?.email) return
+    if (!editingMessage) return
 
     try {
       setIsSavingMessage(true)
 
-      // Referência para o documento da mensagem
-      const messageRef = doc(db, `parabenspravoce/${user?.email}/messages`, editingMessage.id)
+      // Update local state
+      const updatedMessages = mensagens.map((msg) =>
+        msg.id === editingMessage.id ? { ...msg, conteudo: editedContent } : msg,
+      )
 
-      // Atualizar documento no Firebase
-      await updateDoc(messageRef, {
-        content: editedContent,
-        updatedAt: new Date(),
-      })
+      setMensagens(updatedMessages)
 
-      // Atualizar estado local
-      setMensagens(mensagens.map((msg) => (msg.id === editingMessage.id ? { ...msg, conteudo: editedContent } : msg)))
+      // Save to Firebase
+      if (user?.email) {
+        const templatesDocRef = doc(db, `parabenspravoce/${user.email}/settings`, "messageTemplates")
+        await setDoc(templatesDocRef, {
+          templates: updatedMessages,
+          updatedAt: Timestamp.now(),
+        })
 
-      toast({
-        title: "Mensagem atualizada",
-        description: "A mensagem foi atualizada com sucesso.",
-      })
+        toast({
+          title: "Mensagem salva",
+          description: "Seu modelo de mensagem foi salvo com sucesso no Firebase.",
+        })
+      }
 
       setIsEditModalOpen(false)
     } catch (error) {
-      console.error("Erro ao salvar mensagem:", error)
+      console.error("Error saving message template:", error)
       toast({
         title: "Erro",
-        description: "Não foi possível salvar as alterações na mensagem.",
+        description: "Não foi possível salvar o modelo de mensagem.",
         variant: "destructive",
       })
     } finally {
@@ -180,69 +146,143 @@ export default function MensagensPage() {
     }
   }
 
-  // Função para adicionar nova mensagem
-  const addNewMessage = async (title: string, content: string, type = "birthday") => {
-    if (!user?.email) return
+  // --- FUNÇÃO handleSendMessage COM CORREÇÃO DE URL ---
+  const handleSendMessage = async () => {
+    if (!phoneNumber || !message) {
+      toast({
+        title: "Campos obrigatórios",
+        description: "Por favor, preencha o número de telefone e a mensagem.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!user?.email) {
+      toast({
+        title: "Autenticação necessária",
+        description: "Você precisa estar logado para enviar mensagens.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsSending(true)
+    setWhatsappError(null)
 
     try {
-      const messagesRef = collection(db, `parabenspravoce/${user?.email}/messages`)
+      console.log(`[Frontend] Verificando sessão ativa para ${user.email}`)
+      const sessionInfo = await checkUserSession(user.email)
 
-      const docRef = await addDoc(messagesRef, {
-        title,
-        content,
-        type,
-        createdAt: new Date(),
-      })
-
-      const newMessage = {
-        id: docRef.id,
-        titulo: title,
-        conteudo: content,
-        type,
+      if (!sessionInfo.hasSession || !sessionInfo.sessionName) {
+        console.error("[Frontend] Nenhuma sessão ativa encontrada para o usuário.")
+        setWhatsappError("Nenhuma sessão WhatsApp ativa encontrada. Por favor, conecte na página de Configurações.")
+        toast({
+          title: "Sessão não encontrada",
+          description: "Conecte seu WhatsApp na página de Configurações primeiro.",
+          variant: "destructive",
+        })
+        setIsSending(false)
+        return
       }
 
-      setMensagens([...mensagens, newMessage])
+      const activeSessionName = sessionInfo.sessionName
+      console.log(`[Frontend] Usando sessão ativa: ${activeSessionName}`)
 
-      return newMessage
+      // Use the local API endpoint instead of direct WAHA API
+      console.log(`[Frontend] Enviando mensagem via API local`)
+
+      const response = await fetch("/api/whatsapp/send-message", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          phoneNumber: phoneNumber,
+          message: message,
+          userEmail: user?.email,
+          sessionName: activeSessionName,
+        }),
+      })
+
+      console.log(`[Frontend] Requisição enviada para API local`)
+
+      const data = await response.json()
+      console.log(`[Frontend] Resposta da WAHA (${response.status}):`, data)
+
+      if (response.ok) {
+        toast({
+          title: "Mensagem enviada!",
+          description: "Sua mensagem foi enviada com sucesso.",
+        })
+        setMessage("")
+      } else {
+        console.error(`[Frontend] Erro ao enviar mensagem pela API WAHA (${response.status}):`, data)
+
+        const errorMessage =
+          data?.message || data?.error?.message || data?.error || `Erro ${response.status} ao enviar mensagem.`
+
+        setWhatsappError(errorMessage)
+        toast({
+          title: "Erro ao Enviar",
+          description: errorMessage,
+          variant: "destructive",
+        })
+      }
     } catch (error) {
-      console.error("Erro ao adicionar nova mensagem:", error)
+      console.error("[Frontend] Erro GERAL ao enviar mensagem:", error)
+
+      const description =
+        error instanceof Error
+          ? error.message
+          : "Ocorreu um erro desconhecido ao tentar enviar a mensagem. Verifique os logs."
+
+      setWhatsappError(description)
       toast({
-        title: "Erro",
-        description: "Não foi possível adicionar a nova mensagem.",
+        title: "Erro Crítico",
+        description: description,
         variant: "destructive",
       })
-      return null
+    } finally {
+      setIsSending(false)
     }
   }
+  // --- FIM DA FUNÇÃO handleSendMessage ---
 
-  // Função para excluir mensagem
-  const deleteMessage = async (messageId: string) => {
-    if (!user?.email) return
+  // ... (Restante do componente: handleAudioSuccess, handleAudioError, goToConfigPage, JSX return) ...
 
-    try {
-      const messageRef = doc(db, `parabenspravoce/${user?.email}/messages`, messageId)
-      await deleteDoc(messageRef)
+  const handleAudioSuccess = () => {
+    toast({
+      title: "Áudio enviado",
+      description: "Seu áudio foi enviado com sucesso!",
+    })
+    setActiveTab("texto")
+  }
 
-      setMensagens(mensagens.filter((msg) => msg.id !== messageId))
-
+  const handleAudioError = (errorMessage: string) => {
+    if (
+      errorMessage.includes("NO_SESSION") ||
+      errorMessage.includes("necessária") ||
+      errorMessage.includes("conectar")
+    ) {
+      setWhatsappError("Você precisa conectar seu WhatsApp na página de configurações antes de enviar mensagens.")
+    } else {
       toast({
-        title: "Mensagem excluída",
-        description: "A mensagem foi excluída com sucesso.",
-      })
-    } catch (error) {
-      console.error("Erro ao excluir mensagem:", error)
-      toast({
-        title: "Erro",
-        description: "Não foi possível excluir a mensagem.",
+        title: "Erro ao enviar áudio",
+        description: errorMessage || "Ocorreu um erro ao enviar o áudio.",
         variant: "destructive",
       })
     }
+    console.error("[Frontend] Audio send error:", errorMessage)
   }
 
-  // Carregar mensagens ao montar o componente
+  const goToConfigPage = () => {
+    router.push("/configuracoes")
+  }
+
+  // Load contacts when component mounts
   useEffect(() => {
     if (user?.email) {
-      loadMessages()
+      loadMessageTemplates() // Add this line to load message templates
     }
   }, [user])
 
@@ -257,38 +297,123 @@ export default function MensagensPage() {
           <h1 className="text-2xl font-semibold text-[#1e3a29]">Mensagens de Felicitações</h1>
           <p className="text-gray-600 mb-6">Crie, edite e envie mensagens personalizadas para datas especiais</p>
 
+          {/* WhatsApp Connection Error Alert */}
+          {whatsappError && (
+            <Alert variant="destructive" className="mb-6 bg-red-100 border-red-300">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="flex flex-col">
+                <span className="font-semibold text-lg">Erro WhatsApp</span>
+                <span>{whatsappError}</span>
+                {whatsappError.includes("Conecte") && (
+                  <Button onClick={goToConfigPage} className="mt-2 bg-green-500 hover:bg-green-600 self-start">
+                    Ir para Configurações
+                  </Button>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {/* New Card for Direct Message Sending */}
+          <Card className="bg-white border-0 shadow-sm mb-8">
+            <CardHeader>
+              <CardTitle className="text-lg">Enviar Mensagem Direta</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="phone-number">Número do WhatsApp</Label>
+                <Input
+                  id="phone-number"
+                  placeholder="Ex: 5511999998888"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  className="mt-1"
+                />
+                <p className="text-xs text-gray-500 mt-1">Formato internacional (ex: 5511999998888)</p>
+              </div>
+
+              <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="texto" className="flex items-center gap-2">
+                    <MessageSquare className="h-4 w-4" />
+                    Mensagem de Texto
+                  </TabsTrigger>
+                  <TabsTrigger value="audio" className="flex items-center gap-2">
+                    <Mic className="h-4 w-4" />
+                    Mensagem de Áudio
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="texto" className="pt-4">
+                  <div>
+                    <Label htmlFor="message">Mensagem</Label>
+                    <Textarea
+                      id="message"
+                      placeholder="Digite sua mensagem aqui..."
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                      className="mt-1 min-h-[120px]"
+                    />
+                  </div>
+
+                  <div className="flex justify-end mt-4">
+                    <Button
+                      className="bg-green-500 hover:bg-green-600"
+                      onClick={handleSendMessage}
+                      disabled={isSending || !phoneNumber || !message || !user?.email}
+                    >
+                      {isSending ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Enviando...
+                        </>
+                      ) : (
+                        <>
+                          <Send className="h-4 w-4 mr-2" />
+                          Enviar Mensagem
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="audio" className="pt-4">
+                  <AudioRecorderConverter
+                    apiUrl={process.env.NEXT_PUBLIC_WAHA_API_URL || ""}
+                    phoneNumber={phoneNumber}
+                    userEmail={user?.email || ""}
+                    onSuccess={handleAudioSuccess}
+                    onError={handleAudioError}
+                  />
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
+
           {/* Message grid */}
           <h2 className="text-xl font-semibold text-[#1e3a29] mb-4">Modelos de Mensagens</h2>
-          {isLoading ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-green-500" />
-              <span className="ml-2">Carregando mensagens...</span>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {mensagens.map((mensagem) => (
-                <Card key={mensagem.id} className="bg-white border-0 shadow-sm">
-                  <CardHeader>
-                    <CardTitle className="text-lg font-medium">{mensagem.titulo}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-0">
-                    <p className="text-gray-700">{mensagem.conteudo}</p>
-                  </CardContent>
-                  <CardFooter className="flex justify-end pb-4">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-green-600 border-green-200 hover:bg-green-50"
-                      onClick={() => handleEditMessage(mensagem)}
-                    >
-                      <Edit className="h-4 w-4 mr-1" />
-                      Editar Conteúdo
-                    </Button>
-                  </CardFooter>
-                </Card>
-              ))}
-            </div>
-          )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {mensagens.map((mensagem) => (
+              <Card key={mensagem.id} className="bg-white border-0 shadow-sm">
+                <CardHeader>
+                  <CardTitle className="text-lg font-medium">{mensagem.titulo}</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <p className="text-gray-700">{mensagem.conteudo}</p>
+                </CardContent>
+                <CardFooter className="flex justify-end pb-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-green-600 border-green-200 hover:bg-green-50"
+                    onClick={() => handleEditMessage(mensagem)}
+                  >
+                    <Edit className="h-4 w-4 mr-1" />
+                    Editar Conteúdo
+                  </Button>
+                </CardFooter>
+              </Card>
+            ))}
+          </div>
         </div>
       </div>
       {/* Message edit modal */}

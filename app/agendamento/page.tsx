@@ -1,17 +1,27 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import { Sidebar } from "@/components/sidebar"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/contexts/auth-context"
 import { db } from "@/lib/firebase-config"
 import { collection, getDocs, query, orderBy, addDoc, Timestamp, doc, where, deleteDoc } from "firebase/firestore"
 import { useToast } from "@/hooks/use-toast"
-import { Users, Loader2, Search, Calendar } from "lucide-react"
+import { Calendar, Send, Users, Loader2, Search } from "lucide-react"
+import { format } from "date-fns"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
+import { personalizeMessage, generateMessageExample } from "@/utils/message-utils"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { checkUserSession } from "@/lib/session-manager"
+import { MessageTemplates } from "@/components/message-templates"
 
 interface Contact {
   id: string
@@ -42,12 +52,22 @@ export default function AgendamentoPage() {
   const [availableGroups, setAvailableGroups] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date())
+  const [selectedTime, setSelectedTime] = useState("09:00")
+  const [message, setMessage] = useState("")
+  const [usePersonalization, setUsePersonalization] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [todaysBirthdays, setTodaysBirthdays] = useState<Contact[]>([])
+  const [isSendingToday, setIsSendingToday] = useState(false)
   const [scheduledCampaigns, setScheduledCampaigns] = useState<ScheduledCampaign[]>([])
   const [loadingCampaigns, setLoadingCampaigns] = useState(true)
   const [activeTab, setActiveTab] = useState("contacts")
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
+  const [showTodayDialog, setShowTodayDialog] = useState(false)
+  const [sendingTodayMessages, setSendingTodayMessages] = useState(false)
+  const [whatsappError, setWhatsappError] = useState<string | null>(null)
   const { user } = useAuth()
   const { toast } = useToast()
-  const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Load contacts when component mounts
   useEffect(() => {
@@ -71,7 +91,7 @@ export default function AgendamentoPage() {
 
     try {
       setLoadingCampaigns(true)
-      const campaignsRef = collection(db, `parabenspravoce/${user?.email}/campaigns`)
+      const campaignsRef = collection(db, `parabenspravoce/${user.email}/campaigns`)
 
       try {
         // Try to execute the query that requires an index
@@ -146,7 +166,7 @@ export default function AgendamentoPage() {
 
     try {
       // Delete the campaign from Firebase
-      const campaignDocRef = doc(db, `parabenspravoce/${user?.email}/campaigns`, campaignId)
+      const campaignDocRef = doc(db, `parabenspravoce/${user.email}/campaigns`, campaignId)
       await deleteDoc(campaignDocRef)
 
       // Update the local state
@@ -204,6 +224,32 @@ export default function AgendamentoPage() {
       // Extract unique groups
       const groups = Array.from(new Set(loadedContacts.map((contact) => contact.grupo || "Geral")))
       setAvailableGroups(groups)
+
+      // Find today's birthdays
+      const today = new Date()
+      const todayDay = today.getDate()
+      const todayMonth = today.getMonth() + 1
+      const currentMonth = today.getMonth() + 1
+
+      const birthdays = contactsWithDays.filter((contact) => {
+        if (!contact.data_de_nascimento) return false
+
+        let birthDay, birthMonth
+        if (contact.data_de_nascimento.includes("/")) {
+          ;[birthDay, birthMonth] = contact.data_de_nascimento.split("/").map(Number)
+        } else {
+          const date = new Date(contact.data_de_nascimento)
+          birthDay = date.getDate()
+          birthMonth = date.getMonth() + 1
+        }
+
+        return birthDay === todayDay && birthMonth === currentMonth
+      })
+
+      setTodaysBirthdays(birthdays)
+
+      // Aplicar filtros iniciais
+      filterContacts()
 
       console.log("Contatos carregados com sucesso do Firebase")
     } catch (error) {
@@ -274,7 +320,7 @@ export default function AgendamentoPage() {
     // If invalid date, return default
     if (isNaN(birthDay) || isNaN(birthMonth)) return 365
 
-    // Check if it's birthday today (same day and month)
+    // Check if today is the birthday (same day and month)
     if (birthDay === todayDay && birthMonth === todayMonth) {
       return 0 // It's today!
     }
@@ -294,6 +340,23 @@ export default function AgendamentoPage() {
     return diffDias
   }
 
+  // Function to format date
+  const formatarData = (dataString: string): string => {
+    if (!dataString) return ""
+
+    // Check if date is in DD/MM/YYYY format
+    if (dataString.includes("/")) {
+      return dataString.substring(0, 5) // Return only DD/MM
+    }
+
+    try {
+      const data = new Date(dataString)
+      return `${data.getDate().toString().padStart(2, "0")}/${(data.getMonth() + 1).toString().padStart(2, "0")}`
+    } catch (error) {
+      return ""
+    }
+  }
+
   // Toggle contact selection
   const toggleContactSelection = (contactId: string) => {
     setSelectedContact(selectedContact === contactId ? null : contactId)
@@ -310,10 +373,10 @@ export default function AgendamentoPage() {
 
   // Schedule messages
   const handleScheduleMessage = async () => {
-    if (!user?.email || !selectedContact) {
+    if (!user?.email || !message || !selectedContact) {
       toast({
         title: "Campos obrigatórios",
-        description: "Selecione um contato e uma mensagem.",
+        description: "Preencha todos os campos e selecione um contato.",
         variant: "destructive",
       })
       return
@@ -334,34 +397,13 @@ export default function AgendamentoPage() {
         return
       }
 
-      // Get a random message from the list
-      const messagesRef = collection(db, `parabenspravoce/${user?.email}/messages`)
-      const snapshot = await getDocs(messagesRef)
-      const loadedMessages = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        titulo: doc.data().title || `Mensagem ${doc.id}`,
-        conteudo: doc.data().content || "",
-        type: doc.data().type || "birthday",
-      }))
-
-      if (loadedMessages.length === 0) {
-        toast({
-          title: "Sem mensagens",
-          description: "Não há mensagens disponíveis para agendar.",
-          variant: "destructive",
-        })
-        return
-      }
-
-      const randomIndex = Math.floor(Math.random() * loadedMessages.length)
-      const selectedMessage = loadedMessages[randomIndex]
-
       // Create campaign in Firebase with the new structure
-      const campaignsRef = collection(db, `parabenspravoce/${user?.email}/campaigns`)
+      const campaignsRef = collection(db, `parabenspravoce/${user.email}/campaigns`)
       await addDoc(campaignsRef, {
         createdAt: Timestamp.now(),
         status: "scheduled",
-        message: selectedMessage.conteudo,
+        message,
+        usePersonalization,
         contactId: selectedContactData.id, // Store the contact ID for future reference
         contactName: selectedContactData.nome,
         contactPhone: selectedContactData.telefone,
@@ -378,6 +420,7 @@ export default function AgendamentoPage() {
       // Reset form
       setSelectedContact(null)
       setSelectedGroups([])
+      setMessage("") // Clear the message input
 
       // Reload scheduled campaigns
       loadScheduledCampaigns()
@@ -394,6 +437,153 @@ export default function AgendamentoPage() {
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  // Open dialog to send messages to today's birthdays
+  const openSendTodayDialog = () => {
+    if (todaysBirthdays.length === 0) {
+      toast({
+        title: "Sem aniversariantes hoje",
+        description: "Não há contatos fazendo aniversário hoje.",
+      })
+      return
+    }
+
+    setShowTodayDialog(true)
+  }
+
+  // Send messages to today's birthdays
+  const sendTodaysBirthdayMessages = async () => {
+    if (!user?.email || todaysBirthdays.length === 0) {
+      toast({
+        title: "Sem aniversariantes",
+        description: "Não há contatos fazendo aniversário hoje.",
+      })
+      return
+    }
+
+    setSendingTodayMessages(true)
+    setWhatsappError(null)
+
+    try {
+      // Check if user has an active WhatsApp session
+      const sessionInfo = await checkUserSession(user.email)
+
+      if (!sessionInfo.hasSession || !sessionInfo.sessionName) {
+        setWhatsappError("Você precisa conectar seu WhatsApp na página de configurações antes de enviar mensagens.")
+        setSendingTodayMessages(false)
+        return
+      }
+
+      let successCount = 0
+      let errorCount = 0
+
+      // Send messages to each birthday contact
+      for (const contact of todaysBirthdays) {
+        if (!contact.telefone) {
+          errorCount++
+          continue
+        }
+
+        try {
+          // Get a random message from the list
+          // Personalize message if enabled
+          const finalMessage = usePersonalization
+            ? personalizeMessage("Feliz Aniversário {nome}!", contact.nome, true)
+            : "Feliz Aniversário!"
+
+          // Send message using WhatsApp API
+          const response = await fetch("/api/whatsapp/send-message", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              phoneNumber: contact.telefone,
+              message: finalMessage,
+              sessionName: sessionInfo.sessionName,
+            }),
+          })
+
+          if (response.ok) {
+            successCount++
+          } else {
+            errorCount++
+          }
+        } catch (error) {
+          console.error(`Error sending message to ${contact.nome}:`, error)
+          errorCount++
+        }
+      }
+
+      // Show success message
+      if (successCount > 0) {
+        toast({
+          title: "Mensagens enviadas",
+          description: `${successCount} mensagens foram enviadas com sucesso.${errorCount > 0 ? ` ${errorCount} mensagens falharam.` : ""}`,
+        })
+      } else {
+        toast({
+          title: "Falha no envio",
+          description: "Não foi possível enviar as mensagens. Verifique a conexão do WhatsApp.",
+          variant: "destructive",
+        })
+      }
+
+      // Close dialog
+      setShowTodayDialog(false)
+    } catch (error) {
+      console.error("Error sending birthday messages:", error)
+      toast({
+        title: "Erro",
+        description: "Ocorreu um erro ao enviar as mensagens. Tente novamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setSendingTodayMessages(false)
+    }
+  }
+
+  interface SVGSVGProps extends React.SVGProps<SVGSVGElement> {}
+
+  function Check(props: SVGSVGProps) {
+    return (
+      <svg
+        {...props}
+        xmlns="http://www.w3.org/2000/svg"
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
+    )
+  }
+
+  function Info(props: SVGSVGProps) {
+    return (
+      <svg
+        {...props}
+        xmlns="http://www.w3.org/2000/svg"
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <circle cx="12" cy="12" r="10" />
+        <line x1="12" y1="16" x2="12" y2="12" />
+        <line x1="12" y1="8" x2="12.01" y2="8" />
+      </svg>
+    )
   }
 
   return (
@@ -423,6 +613,7 @@ export default function AgendamentoPage() {
             </TabsList>
 
             {/* Contacts tab content */}
+
             <TabsContent value="contacts" className="space-y-6">
               <div className="grid grid-cols-10 gap-4">
                 {/* Contact selection card - 40% de largura */}
@@ -515,34 +706,42 @@ export default function AgendamentoPage() {
                                             className="h-full w-full object-cover"
                                           />
                                         ) : (
-                                          <div className="h-full w-full flex items-center justify-center bg-orange-200 text-orange-600">
-                                            <span className="text-orange-600 font-medium">
-                                              {contact.nome.charAt(0).toUpperCase()}
+                                          <div
+                                            className={`h-full w-full flex items-center justify-center bg-orange-200 text-orange-600`}
+                                          >
+                                            <span className="text-sm font-medium">
+                                              {contact.nome ? contact.nome.charAt(0).toUpperCase() : "?"}
                                             </span>
                                           </div>
                                         )}
                                       </div>
-
-                                      {/* Contact info */}
-                                      <div className="flex-1">
+                                      <div>
                                         <div className="font-medium">{contact.nome}</div>
-                                        <div className="text-sm text-gray-500 flex items-center gap-2">
-                                          {contact.telefone || "Sem telefone"}
-                                          {contact.diasParaAniversario === 0 ? (
-                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
-                                              Hoje!
-                                            </span>
-                                          ) : contact.diasParaAniversario === 1 ? (
-                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                                              Amanhã!
-                                            </span>
-                                          ) : contact.diasParaAniversario !== undefined &&
-                                            contact.diasParaAniversario <= 7 ? (
-                                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-600">
-                                              {contact.diasParaAniversario} dias
-                                            </span>
-                                          ) : null}
-                                        </div>
+                                        {contact.telefone ? (
+                                          <div className="text-sm text-gray-500">{contact.telefone}</div>
+                                        ) : (
+                                          <div className="text-sm text-red-500">Sem telefone</div>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center">
+                                      <div className="text-xs px-2 py-1 rounded-full bg-gray-100 mr-2">
+                                        {contact.grupo || "Geral"}
+                                      </div>
+                                      <div className="flex items-center text-xs">
+                                        <Calendar className="h-3 w-3 mr-1 flex-shrink-0" />
+                                        {contact.diasParaAniversario === 0 ? (
+                                          <span className="text-green-600 font-bold text-sm">HOJE!</span>
+                                        ) : contact.diasParaAniversario === 1 ? (
+                                          <span className="text-blue-600 font-bold text-sm">AMANHÃ!</span>
+                                        ) : contact.diasParaAniversario !== undefined ? (
+                                          <span>
+                                            {formatarData(contact.data_de_nascimento)}{" "}
+                                            <span className="font-bold">(em {contact.diasParaAniversario} dias)</span>
+                                          </span>
+                                        ) : (
+                                          <span>Sem data</span>
+                                        )}
                                       </div>
                                     </div>
                                   </label>
@@ -556,79 +755,55 @@ export default function AgendamentoPage() {
                   </Card>
                 </div>
 
-                {/* Message preview and actions - 60% de largura */}
+                {/* Message and scheduling card - 60% de largura */}
                 <div className="col-span-10 lg:col-span-6">
                   <Card>
                     <CardHeader>
                       <CardTitle className="text-lg font-medium flex items-center">
-                        <Calendar className="h-5 w-5 mr-2 text-green-500" />
-                        Detalhes do Agendamento
+                        <Send className="h-5 w-5 mr-2 text-purple-500" />
+                        Mensagem e Agendamento
                       </CardTitle>
-                      <CardDescription>Confirme os detalhes e agende a mensagem</CardDescription>
+                      <CardDescription>Personalize a mensagem e defina a data de envio</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      {/* Selected contact summary */}
-                      <div className="border rounded-md p-4 bg-gray-50">
-                        <h3 className="text-sm font-medium mb-2">Contato selecionado:</h3>
-                        {selectedContact ? (
-                          (() => {
-                            const contact = contacts.find((c) => c.id === selectedContact)
-                            return contact ? (
-                              <div className="flex items-center gap-3">
-                                <div className="h-10 w-10 rounded-full overflow-hidden flex-shrink-0 bg-orange-200 flex items-center justify-center">
-                                  {contact.imagem ? (
-                                    <img
-                                      src={contact.imagem}
-                                      alt={contact.nome}
-                                      className="h-full w-full object-cover"
-                                    />
-                                  ) : (
-                                    <span className="text-orange-600 font-medium">
-                                      {contact.nome.charAt(0).toUpperCase()}
-                                    </span>
-                                  )}
-                                </div>
-                                <div>
-                                  <div className="font-medium">{contact.nome}</div>
-                                  <div className="text-sm text-gray-500">{contact.telefone}</div>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="text-gray-500">Contato não encontrado</div>
-                            )
-                          })()
-                        ) : (
-                          <div className="text-gray-500">Nenhum contato selecionado</div>
-                        )}
+                      {/* Message input */}
+                      <div className="space-y-2">
+                        <Label htmlFor="message">Texto da Mensagem</Label>
+                        <Textarea
+                          id="message"
+                          value={message}
+                          onChange={(e) => setMessage(e.target.value)}
+                          className="mt-1 min-h-[120px]"
+                          placeholder="Digite sua mensagem de aniversário aqui... Use {nome} para personalizar com o nome do contato."
+                        />
+                        <p className="text-xs text-gray-500">
+                          Use {"{nome}"} para incluir o nome do contato na mensagem.
+                        </p>
                       </div>
 
-                      {/* Message info */}
-                      <div className="border rounded-md p-4">
-                        <h3 className="text-sm font-medium mb-2">Informações da mensagem:</h3>
-                        <div className="space-y-3">
-                          <div>
-                            <span className="text-sm text-gray-600">Tipo de mensagem:</span>
-                            <div className="font-medium">Aniversário</div>
-                          </div>
-                          <div>
-                            <span className="text-sm text-gray-600">Horário de envio:</span>
-                            <div className="font-medium">Seguirá a configuração global (definida em Configurações)</div>
-                          </div>
-                          <div>
-                            <span className="text-sm text-gray-600">Mensagem:</span>
-                            <div className="font-medium text-gray-700 bg-gray-50 p-3 rounded-md border mt-1">
-                              Será selecionada automaticamente uma das mensagens configuradas em "Mensagens"
-                            </div>
-                          </div>
+                      {/* Personalization toggle */}
+                      <div className="flex items-center space-x-2">
+                        <Switch
+                          id="personalization"
+                          checked={usePersonalization}
+                          onCheckedChange={setUsePersonalization}
+                        />
+                        <Label htmlFor="personalization">Personalizar com nome do contato</Label>
+                      </div>
+
+                      {/* Message preview */}
+                      {usePersonalization && (
+                        <div className="bg-gray-50 p-3 rounded-md border text-sm">
+                          <p className="font-medium mb-1">Exemplo de personalização:</p>
+                          <p className="text-gray-600">{generateMessageExample(message).personalized}</p>
                         </div>
-                      </div>
-
-                      {/* Action button */}
+                      )}
+                    </CardContent>
+                    <CardFooter>
                       <Button
-                        className="w-full bg-green-600 hover:bg-green-700"
-                        size="lg"
+                        className="w-full bg-green-500 hover:bg-green-600"
                         onClick={handleScheduleMessage}
-                        disabled={!selectedContact || isSubmitting}
+                        disabled={isSubmitting || !message || !selectedContact}
                       >
                         {isSubmitting ? (
                           <>
@@ -636,24 +811,35 @@ export default function AgendamentoPage() {
                             Agendando...
                           </>
                         ) : (
-                          "Agendar Mensagem"
+                          <>
+                            <Calendar className="mr-2 h-4 w-4" />
+                            Agendar Mensagem Personalizada
+                          </>
                         )}
                       </Button>
-                    </CardContent>
+                      <p className="w-full text-xs text-gray-500 mt-2 text-center">
+                        A mensagem será enviada no horário configurado em Configurações
+                      </p>
+                    </CardFooter>
                   </Card>
+                </div>
+
+                {/* Random Messages Card - 100% de largura */}
+                <div className="col-span-10 mt-4">
+                  <MessageTemplates />
                 </div>
               </div>
             </TabsContent>
 
-            {/* Scheduled tab content */}
+            {/* Scheduled messages tab content */}
             <TabsContent value="scheduled" className="space-y-6">
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg font-medium flex items-center">
-                    <Calendar className="h-5 w-5 mr-2 text-green-500" />
+                    <Calendar className="h-5 w-5 mr-2 text-blue-500" />
                     Mensagens Agendadas
                   </CardTitle>
-                  <CardDescription>Mensagens programadas para envio automático no horário configurado</CardDescription>
+                  <CardDescription>Visualize e gerencie suas mensagens personalizadas agendadas</CardDescription>
                 </CardHeader>
                 <CardContent>
                   {loadingCampaigns ? (
@@ -661,43 +847,47 @@ export default function AgendamentoPage() {
                       <Loader2 className="h-8 w-8 animate-spin text-green-500" />
                     </div>
                   ) : scheduledCampaigns.length === 0 ? (
-                    <div className="text-center py-8 px-4 bg-gray-50 rounded-md border">
-                      <Calendar className="h-12 w-12 mx-auto text-gray-400 mb-2" />
-                      <h3 className="text-lg font-medium text-gray-700 mb-1">Nenhuma mensagem agendada</h3>
-                      <p className="text-gray-500 max-w-md mx-auto">
-                        Você ainda não agendou mensagens específicas para seus contatos. Vá para a aba "Agendar
-                        Mensagens" para criar um novo agendamento.
-                      </p>
-                      <Button className="mt-4 bg-green-600 hover:bg-green-700" onClick={() => setActiveTab("contacts")}>
-                        Agendar Mensagem
+                    <div className="text-center py-8 text-gray-500">
+                      <Calendar className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                      <p className="font-medium">Nenhuma mensagem agendada</p>
+                      <p className="text-sm mt-1">Agende mensagens na aba "Agendar Mensagens"</p>
+                      <Button className="mt-4 bg-green-500 hover:bg-green-600" onClick={() => setActiveTab("contacts")}>
+                        Agendar Mensagens
                       </Button>
                     </div>
                   ) : (
                     <div className="space-y-4">
                       {scheduledCampaigns.map((campaign) => (
-                        <div key={campaign.id} className="border rounded-md p-4 hover:bg-gray-50">
-                          <div className="flex justify-between items-start">
+                        <div key={campaign.id} className="border rounded-lg p-4 hover:bg-gray-50">
+                          <div className="flex justify-between items-start mb-3">
                             <div>
-                              <h3 className="font-medium">{campaign.contactName}</h3>
-                              <p className="text-sm text-gray-500 mb-2">{campaign.contactPhone}</p>
-                              <div className="bg-gray-100 p-3 rounded text-gray-700 text-sm">{campaign.message}</div>
+                              <div className="flex items-center gap-2">
+                                <Calendar className="h-4 w-4 text-blue-500" />
+                                <span className="font-medium">Mensagem para: {campaign.contactName}</span>
+                              </div>
+                              <div className="text-sm text-gray-500 mt-1">
+                                Será enviada no horário configurado em Configurações
+                              </div>
+                            </div>
+                            <div className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                              Agendada
+                            </div>
+                          </div>
+                          <div className="bg-gray-50 p-3 rounded-md border mb-3">
+                            <p className="text-sm">{campaign.message}</p>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <div className="text-xs text-gray-500">
+                              Criada em: {format(campaign.createdAt, "dd/MM/yyyy HH:mm")}
                             </div>
                             <Button
                               variant="outline"
                               size="sm"
-                              className="text-red-600 hover:bg-red-50 hover:text-red-700"
+                              className="text-red-500 border-red-200 hover:bg-red-50"
                               onClick={() => cancelScheduledMessage(campaign.id)}
                             >
                               Cancelar
                             </Button>
-                          </div>
-                          <div className="flex items-center justify-between mt-3 pt-3 border-t">
-                            <div className="text-xs text-gray-500">
-                              Agendado em: {campaign.createdAt.toLocaleString()}
-                            </div>
-                            <div className="text-xs font-medium text-green-600">
-                              Será enviado no horário configurado
-                            </div>
                           </div>
                         </div>
                       ))}
@@ -709,6 +899,42 @@ export default function AgendamentoPage() {
           </Tabs>
         </div>
       </div>
+
+      {/* Edit Message Dialog */}
+      <Dialog open={false} onOpenChange={() => {}}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Mensagem</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <Textarea
+              value={""}
+              onChange={() => {}}
+              className="min-h-[150px]"
+              placeholder="Digite a mensagem aqui..."
+            />
+            <p className="text-xs text-gray-500 mt-2">Use {"{nome}"} para incluir o nome do contato na mensagem.</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {}} disabled={false}>
+              Cancelar
+            </Button>
+            <Button onClick={() => {}} disabled={false} className="bg-green-500 hover:bg-green-600">
+              {false ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                <>
+                  <Check className="h-4 w-4 mr-2" />
+                  Salvar
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
