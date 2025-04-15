@@ -18,19 +18,12 @@ export function generateMessageId(
   date?: Date,
 ): string {
   // Format: messageType_userEmail_contactIdentifier_YYYY-MM-DD
-  // Use only the date part (without time) to ensure all messages on the same day have the same date component
-  const today = date || new Date()
-  const dateStr = today.toISOString().split("T")[0] // YYYY-MM-DD format
+  const dateStr = date ? date.toISOString().split("T")[0] : new Date().toISOString().split("T")[0]
 
   // Clean the contact identifier (remove non-alphanumeric characters if it's a phone number)
-  const cleanIdentifier =
-    typeof contactIdentifier === "string" ? contactIdentifier.replace(/\D/g, "") : contactIdentifier
+  const cleanIdentifier = contactIdentifier.replace(/\D/g, "")
 
-  // Clean the email (remove special characters)
-  const cleanEmail = typeof userEmail === "string" ? userEmail.replace(/[^\w@.-]/g, "") : userEmail
-
-  // Create a consistent ID format that doesn't depend on the message content
-  return `${messageType}_${cleanEmail}_${cleanIdentifier}_${dateStr}`
+  return `${messageType}_${userEmail}_${cleanIdentifier}_${dateStr}`
 }
 
 /**

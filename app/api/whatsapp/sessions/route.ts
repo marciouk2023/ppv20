@@ -1,135 +1,102 @@
+// Caminho: app/api/whatsapp/sessions/route.ts
+
 import { type NextRequest, NextResponse } from "next/server"
+import https from "https"
 import { WAHA_CONFIG } from "@/lib/wahaConfig"
 
-// Use the URL and Key imported from the configuration file
 const WAHA_API_URL = WAHA_CONFIG.API_URL
 const WAHA_API_KEY = WAHA_CONFIG.API_KEY
 
 export async function POST(request: NextRequest) {
-  // Check if the URL is defined in the configuration file
-  if (!WAHA_API_URL) {
-    console.error("[API Proxy /api/whatsapp/sessions] Error: WAHA API URL not defined in lib/wahaConfig.ts!")
-    return NextResponse.json({ message: "Incomplete server configuration: WAHA API URL not defined." }, { status: 500 })
+  const agent = new https.Agent({ rejectUnauthorized: false })
+
+  if (!WAHA_API_URL || !WAHA_API_KEY) {
+    console.error("[API /sessions] Erro: WAHA API URL ou API Key não definida na configuração!")
+    return NextResponse.json({ success: false, message: "Configuração interna incompleta." }, { status: 500 })
   }
 
   try {
-    // Get data sent by the frontend (expecting a JSON with "sessionName" and "userEmail")
     const body = await request.json()
-    const sessionName = body.sessionName
+    const sessionName = body.sessionName // Ex: session_12345
     const userEmail = body.userEmail
 
-    // Validate if session name was sent
     if (!sessionName) {
-      console.warn("[API Proxy /api/whatsapp/sessions] Request received without sessionName.")
+      console.warn("[API /sessions] Requisição recebida sem sessionName.")
       return NextResponse.json(
-        { message: "Session name (sessionName) is required in the request body." },
+        { success: false, message: "Session name (sessionName) é obrigatório no corpo da requisição." },
         { status: 400 },
       )
     }
 
+    // <<< IMPORTANTE: Usa o nome da sessão SEM o prefixo para o corpo da requisição do WAHA >>>
+    const wahaSessionNameToCreate = sessionName.startsWith("session_") ? sessionName.substring(8) : sessionName
+
     console.log(
-      `[API Proxy /api/whatsapp/sessions] Received request to create session: ${sessionName} for user: ${userEmail || "unknown"}`,
+      `[API /sessions] Recebida requisição para iniciar/criar sessão: ${sessionName} (WAHA name: ${wahaSessionNameToCreate}) para usuário: ${userEmail || "desconhecido"}`,
     )
 
-    // Prepare headers for the WAHA API call
     const headers: HeadersInit = {
       "Content-Type": "application/json",
       Accept: "application/json",
+      "X-Api-Key": WAHA_API_KEY,
     }
+    console.log(`[API /sessions] Enviando requisição para WAHA com X-Api-Key.`)
 
-    // Add authentication header if API key is defined
-    if (WAHA_API_KEY) {
-      headers["Authorization"] = `Bearer ${WAHA_API_KEY}`
-      console.log(`[API Proxy /api/whatsapp/sessions] Sending request to WAHA with API key (from wahaConfig.ts).`)
-    } else {
-      console.log(`[API Proxy /api/whatsapp/sessions] Sending request to WAHA without API key.`)
-    }
-
-    // Prepare the request body for the WAHA API according to documentation
     const requestBody = {
-      name: sessionName,
-      start: true, // Try to start the session immediately
+      name: wahaSessionNameToCreate, // Envia o nome SEM prefixo para o WAHA criar/iniciar
     }
 
-    // Define the exact URL of the WAHA endpoint to create a session
-    const wahaEndpoint = `${WAHA_API_URL}/api/sessions`
-    console.log(`[API Proxy /api/whatsapp/sessions] Calling WAHA: POST ${wahaEndpoint}`)
+    const wahaEndpoint = `${WAHA_API_URL}/api/sessions/start`
+    console.log(`[API /sessions] Chamando WAHA: POST ${wahaEndpoint} com body:`, JSON.stringify(requestBody))
 
-    // Make the fetch call to the actual WAHA API
     const wahaResponse = await fetch(wahaEndpoint, {
       method: "POST",
+      // @ts-ignore
+      agent,
       headers: headers,
       body: JSON.stringify(requestBody),
       cache: "no-store",
     })
 
-    // Parse the WAHA API response
-    if (wahaResponse.status === 422) {
-      // Common status for "session already exists" or similar error
-      console.log(
-        `[API Proxy /api/whatsapp/sessions] WAHA responded 422 for '${sessionName}' (Session already exists or not processable).`,
-      )
-      // Return success to the frontend, as the session exists or the state is expected
-      return NextResponse.json({
-        success: true,
-        message: "Session already exists or could not be processed (422)",
-        userEmail: userEmail,
-      })
-    }
+    const responseText = await wahaResponse.text()
 
-    if (wahaResponse.status === 201) {
-      // Expected status for "Successfully created"
-      const data = await wahaResponse.json()
-      console.log(`[API Proxy /api/whatsapp/sessions] WAHA responded 201 for '${sessionName}' (Created successfully).`)
-      return NextResponse.json({
-        success: true,
-        data: data,
-        userEmail: userEmail,
-      })
-    }
-
-    // If not 201 or 422, treat as error
     if (!wahaResponse.ok) {
-      const errorText = await wahaResponse.text()
       console.error(
-        `[API Proxy /api/whatsapp/sessions] Error from WAHA API (${wahaResponse.status}) for '${sessionName}':`,
-        errorText,
+        `[API /sessions] Erro da API WAHA (<span class="math-inline">\{wahaResponse\.status\}\) para iniciar '</span>{wahaSessionNameToCreate}': ${responseText}`,
       )
-
-      // Try to return a clearer error message
       let errorMessage = `WAHA API Error (${wahaResponse.status})`
       try {
-        const errorJson = JSON.parse(errorText)
-        errorMessage = errorJson.message || errorText
+        errorMessage = JSON.parse(responseText).message || responseText
       } catch (e) {
-        // Keep original text if not JSON
-        errorMessage = errorText
+        errorMessage = responseText
       }
-
-      // Return the original error status from WAHA to the frontend
-      return NextResponse.json({ message: errorMessage }, { status: wahaResponse.status })
+      return NextResponse.json({ success: false, message: errorMessage }, { status: wahaResponse.status })
     }
 
-    // If response is OK but not 201 (unexpected)
-    console.warn(
-      `[API Proxy /api/whatsapp/sessions] Unexpected OK response from WAHA for '${sessionName}': Status ${wahaResponse.status}`,
+    console.log(
+      `[API /sessions] Resposta OK (<span class="math-inline">\{wahaResponse\.status\}\) da WAHA para iniciar/criar '</span>{wahaSessionNameToCreate}'. Resposta: ${responseText}`,
     )
-
-    // Try to return the response body anyway
+    let responseData = {}
     try {
-      return NextResponse.json(await wahaResponse.json())
+      responseData = JSON.parse(responseText)
     } catch (e) {
-      return NextResponse.json(
-        { message: "Received unexpected OK status from WAHA API" },
-        { status: wahaResponse.status },
-      )
+      responseData = { raw: responseText }
     }
+
+    // Retorna sucesso e o NOME COMPLETO (com prefixo) para o frontend usar nas próximas chamadas
+    return NextResponse.json({
+      success: true,
+      message: "Pedido de início de sessão enviado com sucesso para WAHA.",
+      sessionName: sessionName, // Retorna o nome original com prefixo
+      data: responseData,
+      userEmail: userEmail,
+    })
   } catch (error) {
-    console.error("[API Proxy /api/whatsapp/sessions] Internal route error:", error)
-    // Return a generic 500 error to the frontend
+    console.error("[API /sessions] Erro interno na rota:", error)
     return NextResponse.json(
       {
-        message: "Internal Server Error processing session creation.",
+        success: false,
+        message: "Erro interno no servidor ao processar pedido de sessão.",
         error: error instanceof Error ? error.message : String(error),
       },
       { status: 500 },
@@ -137,9 +104,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Add a handler for GET to avoid errors if called incorrectly
 export async function GET(request: NextRequest) {
-  // Return 405 Method Not Allowed if someone tries to GET this endpoint
-  console.log("[API Proxy /api/whatsapp/sessions] Received GET request (not allowed).")
-  return NextResponse.json({ message: "GET method not allowed for this route. Use POST." }, { status: 405 })
+  console.log("[API /sessions] Recebido GET request (não permitido).")
+  return NextResponse.json({ message: "Método GET não permitido para esta rota. Use POST." }, { status: 405 })
 }

@@ -20,7 +20,7 @@ export async function enviarAudioDirect(phone: string, audioData: string, sessio
     console.log("[AudioRecorderDirect] Payload:", JSON.stringify(payload))
 
     // Fazer a requisição para o endpoint
-    const response = await fetch("/api/whatsapp/send-audio-direct", {
+    const response = await fetch("https://api.parabenspravoce.com/api/sendVoice", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

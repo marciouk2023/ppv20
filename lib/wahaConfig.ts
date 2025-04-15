@@ -1,28 +1,28 @@
-// File: lib/wahaConfig.ts
-// Centralizes the WAHA API configuration for use by the backend proxy
+// Caminho do arquivo: lib/wahaConfig.ts
 
-// Define the correct API URL with fallback
-const apiUrl = process.env.WAHA_API_URL || "https://api.parabenspravoce.com"
-// Ensure the URL is properly formatted with https:// prefix
-const formattedApiUrl = apiUrl.startsWith("http") ? apiUrl : `https://${apiUrl}`
-const apiKey = process.env.WAHA_API_KEY || null
+export const WAHA_CONFIG = {
+  /**
+   * A URL base da sua API WAHA, como ela é acessível externamente através do Nginx.
+   * NÃO inclua a porta :3000 aqui, pois o Nginx está gerenciando isso.
+   * Use HTTPS porque o Nginx está servindo um certificado SSL válido (Let's Encrypt).
+   */
+  API_URL: "https://api.parabenspravoce.com",
 
-const WAHA_CONFIG = {
-  // Always use the absolute URL
-  API_URL: formattedApiUrl,
-  API_KEY: apiKey,
+  /**
+   * A chave de API secreta que você configurou no container Docker do WAHA.
+   * Esta chave é necessária para autenticar todas as requisições.
+   */
+  API_KEY: "Cara2211Msa2013+ou-6",
+
+  // Você pode adicionar outras configurações relacionadas ao WAHA aqui se precisar no futuro.
 }
 
-// Function to get the base URL of the WAHA API
-export function getWAHABaseURL(): string {
-  if (!WAHA_CONFIG.API_URL) {
-    console.error("CRITICAL ERROR: WAHA API URL is not defined in lib/wahaConfig.ts!")
-    throw new Error("WAHA API URL is not defined in lib/wahaConfig.ts")
-  }
-
-  // Log the API URL being used for debugging
-  console.log(`[wahaConfig] Using WAHA API URL: ${WAHA_CONFIG.API_URL}`)
-  return WAHA_CONFIG.API_URL
+// Função auxiliar para obter a URL base da API WAHA
+export const getWAHABaseURL = () => {
+  return (
+    process.env.WAHA_BASE_URL ||
+    process.env.WAHA_API_URL ||
+    process.env.NEXT_PUBLIC_WAHA_API_URL ||
+    "https://api.parabenspravoce.com"
+  )
 }
-
-export { WAHA_CONFIG }

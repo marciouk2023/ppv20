@@ -1,4 +1,4 @@
-// utils/message-sender.ts - COMPREHENSIVE FIX
+\ // utils/message-sender.ts - COMPREHENSIVE FIX
 import { db } from "@/lib/firebase-config"
 import { collection, query, where, getDocs, Timestamp, runTransaction, doc } from "firebase/firestore"
 import { personalizeMessage } from "@/utils/message-utils"
@@ -26,7 +26,8 @@ interface SendMessageResult {
 
 export async function sendMessage(options: SendMessageOptions): Promise<SendMessageResult> {
   const functionStartTime = Date.now()
-  console.log(`--- [sendMessage_LOG] Start processing at ${new Date(functionStartTime).toISOString()} ---`)
+  console.log(`
+--- [sendMessage_LOG] Start processing at ${new Date(functionStartTime).toISOString()} ---`)
   console.log(
     `[sendMessage_LOG] Received options: ${JSON.stringify({ ...options, message: options.message.substring(0, 30) + "..." })}`,
   )
@@ -61,20 +62,16 @@ export async function sendMessage(options: SendMessageOptions): Promise<SendMess
   try {
     // ENHANCED: First check if this message has already been sent today (outside transaction for efficiency)
     const sentMessagesRef = collection(db, "sent_messages")
-    const todayStart = new Date(today)
-    todayStart.setHours(0, 0, 0, 0)
     const q = query(
       sentMessagesRef,
       where("messageId", "==", messageId),
-      where("timestamp", ">=", Timestamp.fromDate(todayStart)),
+      where("timestamp", ">=", Timestamp.fromDate(new Date(today))),
       where("status", "in", ["sent", "sending"]),
     )
 
     const existingMessages = await getDocs(q)
     if (!existingMessages.empty) {
-      console.log(
-        `[sendMessage_LOG] Message already sent today. MessageId: ${messageId}, Count: ${existingMessages.size}`,
-      )
+      console.log(`[sendMessage_LOG] Message already sent today. MessageId: ${messageId}`)
       return {
         success: true,
         message: "Mensagem já enviada hoje para este contato (verificação prévia)",

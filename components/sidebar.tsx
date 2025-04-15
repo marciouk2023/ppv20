@@ -2,9 +2,8 @@
 
 import type React from "react"
 import { useState, useEffect, useRef } from "react"
-import Link from "next/link"
 import { useIsMobile } from "@/hooks/use-mobile"
-import { Menu, X, Camera, Settings, HelpCircle, LogOut, Loader2, User, BarChart3 } from "lucide-react"
+import { Menu, X, Camera, Settings, LogOut, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useAuth } from "@/contexts/auth-context"
 import { useRouter } from "next/navigation"
@@ -34,19 +33,29 @@ interface NavItemProps {
 }
 
 export function NavItem({ icon, label, href, active, onClick }: NavItemProps) {
+  const router = useRouter()
+
+  const handleClick = () => {
+    if (onClick) {
+      onClick()
+    }
+
+    if (href && href !== "#") {
+      router.push(href)
+    }
+  }
+
   return (
-    <Link
-      href={href}
-      className={`w-full flex items-center gap-3 px-4 py-2 text-sm ${
+    <div
+      className={`w-full flex items-center gap-3 px-4 py-2 text-sm cursor-pointer ${
         active ? "text-green-600 font-medium" : "text-gray-600 hover:bg-gray-50"
       }`}
-      prefetch={true}
       aria-current={active ? "page" : undefined}
-      onClick={onClick}
+      onClick={handleClick}
     >
       {icon}
       <span>{label}</span>
-    </Link>
+    </div>
   )
 }
 
@@ -479,17 +488,14 @@ export function Sidebar({ activePage }: { activePage: string }) {
           {/* Clickable area to open modal */}
           <div
             className="w-full flex flex-col items-center cursor-pointer hover:bg-gray-50 p-2 rounded-lg transition-colors sidebar-profile-area"
-            onClick={() => setIsProfileModalOpen(true)}
+            onClick={() => router.push("/perfil")}
           >
             {/* Institution/Church name */}
-            <div className="mb-4 text-center">
-              <h1 className="font-urbanist-extrabold text-lg text-[#1e3a29]">{churchName}</h1>
-            </div>
 
             {/* Profile picture */}
             <div
               className="w-16 h-16 rounded-full overflow-hidden border-2 border-green-500 mb-3 relative cursor-pointer group"
-              onClick={() => setIsProfileModalOpen(true)}
+              onClick={() => router.push("/perfil")}
             >
               <img
                 src={profileImage || "/placeholder.svg"}
@@ -532,12 +538,12 @@ export function Sidebar({ activePage }: { activePage: string }) {
           <NavItem
             icon={
               <div className="w-5 h-5 flex items-center justify-center">
-                <ContactsIcon />
+                <ScheduleIcon />
               </div>
             }
-            label="Contatos"
-            href="/contatos"
-            active={activePage === "contatos"}
+            label="Agendamento"
+            href="/agendamento"
+            active={activePage === "agendamento"}
             onClick={closeSidebar}
           />
           <NavItem
@@ -546,7 +552,7 @@ export function Sidebar({ activePage }: { activePage: string }) {
                 <ContactsIcon />
               </div>
             }
-            label="Gerenciar Contatos"
+            label="Contatos"
             href="/contatos-gerenciamento"
             active={activePage === "contatos-gerenciamento"}
             onClick={closeSidebar}
@@ -562,42 +568,9 @@ export function Sidebar({ activePage }: { activePage: string }) {
             active={activePage === "mensagens"}
             onClick={closeSidebar}
           />
-          <NavItem
-            icon={
-              <div className="w-5 h-5 flex items-center justify-center">
-                <ScheduleIcon />
-              </div>
-            }
-            label="Agendamento"
-            href="/agendamento"
-            active={activePage === "agendamento"}
-            onClick={closeSidebar}
-          />
-          <NavItem
-            icon={
-              <div className="w-5 h-5 flex items-center justify-center">
-                <BarChart3 className="h-4 w-4" />
-              </div>
-            }
-            label="Análises"
-            href="/analises"
-            active={activePage === "analises"}
-            onClick={closeSidebar}
-          />
         </nav>
 
         <div className="p-4 border-t border-gray-200">
-          <NavItem
-            icon={
-              <div className="w-5 h-5 flex items-center justify-center">
-                <User className="h-4 w-4" />
-              </div>
-            }
-            label="Perfil"
-            href="/perfil"
-            active={activePage === "perfil"}
-            onClick={closeSidebar}
-          />
           <NavItem
             icon={
               <div className="w-5 h-5 flex items-center justify-center">
@@ -607,17 +580,6 @@ export function Sidebar({ activePage }: { activePage: string }) {
             label="Configurações"
             href="/configuracoes"
             active={activePage === "configuracoes"}
-            onClick={closeSidebar}
-          />
-          <NavItem
-            icon={
-              <div className="w-5 h-5 flex items-center justify-center">
-                <HelpCircle className="h-4 w-4" />
-              </div>
-            }
-            label="Ajuda & Suporte"
-            href="#"
-            active={false}
             onClick={closeSidebar}
           />
           <NavItem
@@ -667,7 +629,7 @@ export function Sidebar({ activePage }: { activePage: string }) {
                     <img
                       src={profileImage || "/placeholder.svg"}
                       alt="Profile picture"
-                      className="h-full w-full object-cover"
+                      className="w-full h-full object-cover"
                     />
                     <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
                       <Camera className="h-5 w-5 text-white" />

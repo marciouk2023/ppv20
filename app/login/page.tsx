@@ -140,8 +140,11 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <h1 className="text-2xl font-bold text-center mb-1">Login</h1>
-        <p className="text-center text-gray-600 mb-6">Entre com seu email e senha para acessar o sistema</p>
+        <h1 className="text-2xl font-bold text-center mb-1">
+          Nunca + esqueça
+          <br />o aniversário de ninguém
+        </h1>
+        <p className="text-center text-gray-600 mb-6">Insira seu email e senha</p>
 
         {error && (
           <Alert variant="destructive" className="mb-4">

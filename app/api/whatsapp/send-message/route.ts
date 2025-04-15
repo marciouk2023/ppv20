@@ -1,106 +1,175 @@
+// Caminho: app/api/whatsapp/send-message/route.ts
+
 import { type NextRequest, NextResponse } from "next/server"
-import { getWAHABaseURL } from "@/lib/wahaConfig"
-import { getUserSession } from "@/lib/session-manager"
+import https from "https"
+import { WAHA_CONFIG } from "@/lib/wahaConfig"
+import { db } from "@/lib/firebaseConfig"
+import { collection, query, where, getDocs, addDoc, Timestamp } from "firebase/firestore"
 
 export async function POST(request: NextRequest) {
+  const agent = new https.Agent({ rejectUnauthorized: false })
+
+  if (!WAHA_CONFIG.API_URL || !WAHA_CONFIG.API_KEY) {
+    console.error("[API send-message] Erro: WAHA API URL ou API Key não definida!")
+    return NextResponse.json({ success: false, message: "Configuração interna incompleta." }, { status: 500 })
+  }
+
   try {
     const body = await request.json()
-    const { phoneNumber, message, userEmail } = body
+    const { phoneNumber, message, sessionName, messageId } = body
 
-    console.log(`[API] Processing message request: phone=${phoneNumber}, user=${userEmail}`)
+    // NOVO: Verificar ID da mensagem para deduplicação
+    if (messageId) {
+      // Verificar se esta mensagem já foi enviada nas últimas 24 horas
+      try {
+        const recentMessagesRef = collection(db, "sent_messages")
+        const oneDayAgo = new Date()
+        oneDayAgo.setHours(oneDayAgo.getHours() - 24)
 
-    if (!phoneNumber || !message) {
-      console.log("[API] Missing phone number or message")
-      return NextResponse.json({ success: false, message: "Phone number and message are required" }, { status: 400 })
+        const q = query(
+          recentMessagesRef,
+          where("messageId", "==", messageId),
+          where("timestamp", ">=", Timestamp.fromDate(oneDayAgo)),
+        )
+
+        const snapshot = await getDocs(q)
+        if (!snapshot.empty) {
+          console.log(`[API send-message] Mensagem duplicada detectada com ID: ${messageId}. Ignorando.`)
+          return NextResponse.json({
+            success: true,
+            message: "Mensagem já enviada anteriormente (deduplicada)",
+            duplicated: true,
+          })
+        }
+
+        // Registrar esta mensagem para deduplicação futura
+        await addDoc(recentMessagesRef, {
+          messageId,
+          phoneNumber,
+          message: message.substring(0, 50) + (message.length > 50 ? "..." : ""),
+          timestamp: Timestamp.now(),
+        })
+      } catch (dedupeError) {
+        // Se houver erro na deduplicação, registrar mas continuar com o envio
+        console.warn(`[API send-message] Erro ao verificar duplicação: ${dedupeError}. Continuando com o envio.`)
+      }
+    } else {
+      // Se não houver messageId, gerar um aviso
+      console.warn("[API send-message] Requisição sem messageId. Recomendado usar messageId para evitar duplicações.")
     }
 
-    if (!userEmail) {
-      console.log("[API] Missing user email")
+    if (!phoneNumber || !message || !sessionName) {
+      // Validação básica dos campos recebidos
+      console.warn("[API send-message] Requisição inválida. Faltando phoneNumber, message ou sessionName.")
+      const missing = []
+      if (!phoneNumber) missing.push("phoneNumber")
+      if (!message) missing.push("message")
+      if (!sessionName) missing.push("sessionName")
       return NextResponse.json(
-        { success: false, message: "User email is required to identify the session" },
+        { success: false, message: `Campos obrigatórios faltando: ${missing.join(", ")}` },
         { status: 400 },
       )
     }
 
-    // Get the user's session
-    const sessionData = await getUserSession(userEmail)
-    console.log(`[API] Session data for ${userEmail}:`, sessionData)
+    // <<< CORREÇÃO DA FORMATAÇÃO >>>
+    // 1. Remove todos os caracteres não-numéricos.
+    //    ASSUME que o usuário digitou o CÓDIGO DO PAÍS (DDI) no frontend.
+    let chatId = phoneNumber.replace(/\D/g, "")
 
-    if (!sessionData || !sessionData.hasSession || !sessionData.sessionName) {
-      console.log(`[API] No active session found for user: ${userEmail}`)
+    // 2. Verifica se sobrou um número razoável (ex: mais que 5 dígitos)
+    if (chatId.length < 6) {
+      // Ajuste o tamanho mínimo se necessário
+      console.error("[API send-message] Número de telefone inválido após limpeza:", phoneNumber)
       return NextResponse.json(
-        {
-          success: false,
-          message: "Conexão WhatsApp necessária",
-          details: "Você precisa conectar seu WhatsApp na página de configurações antes de enviar mensagens.",
-          code: "NO_SESSION",
-        },
+        { success: false, message: "Número de telefone inválido fornecido (muito curto após limpeza)." },
         { status: 400 },
       )
     }
 
-    const sessionName = sessionData.sessionName
+    // 3. Garante que termina com @c.us (o WAHA espera isso)
+    if (!chatId.endsWith("@c.us")) {
+      chatId = `${chatId}@c.us`
+    }
+    // <<< FIM DA CORREÇÃO DA FORMATAÇÃO >>>
 
-    // Format the phone number (remove spaces, dashes, etc.)
-    const formattedPhone = phoneNumber.replace(/\D/g, "")
+    console.log(`[API send-message] Formatado chatId FINAL (esperando DDI do input): ${chatId}`)
 
-    // Get the base URL of the WAHA API - ensure it's the absolute URL
-    const wahaBaseURL = getWAHABaseURL()
-    console.log(`[API] Using WAHA API URL: ${wahaBaseURL}`)
+    // Remove o prefixo 'session_' do nome da sessão para enviar ao WAHA
+    const wahaSessionName = sessionName.startsWith("session_") ? sessionName.substring(8) : sessionName
+    console.log(`[API send-message] Usando nome de sessão para WAHA: ${wahaSessionName}`)
 
-    // Endpoint for sending message - use the complete absolute URL
-    const sendMessageUrl = `${wahaBaseURL}/api/sendText`
-    console.log(`[API] Full endpoint URL: ${sendMessageUrl}`)
+    // Prepara cabeçalhos e corpo da requisição para WAHA
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "X-Api-Key": WAHA_CONFIG.API_KEY,
+    }
+    const requestBody = {
+      chatId: chatId, // Número JÁ DEVE conter DDI + @c.us
+      text: message,
+      session: wahaSessionName,
+    }
 
-    console.log(`[API] Sending message to ${formattedPhone} via session ${sessionName}`)
+    const wahaEndpoint = `${WAHA_CONFIG.API_URL}/api/sendText`
+    console.log(`[API send-message] Chamando WAHA: POST ${wahaEndpoint} com body: ${JSON.stringify(requestBody)}`)
 
-    // Make the request to the WAHA API
-    const wahaResponse = await fetch(sendMessageUrl, {
+    // Chama a API WAHA
+    const wahaResponse = await fetch(wahaEndpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-      },
-      body: JSON.stringify({
-        chatId: `${formattedPhone}@c.us`,
-        text: message,
-        session: sessionName,
-      }),
+      // @ts-ignore
+      agent,
+      headers: headers,
+      body: JSON.stringify(requestBody),
+      cache: "no-store",
     })
 
-    // Check if the response was successful
+    const responseText = await wahaResponse.text()
+
+    // Verifica resposta
     if (!wahaResponse.ok) {
-      const errorText = await wahaResponse.text()
-      console.error(`[API] Error from WAHA API (${wahaResponse.status}):`, errorText)
-
-      let errorMessage = `Error sending message: ${wahaResponse.status}`
+      console.error(
+        `[API send-message] Erro da API WAHA (${wahaResponse.status}) ao enviar para '${chatId}' usando sessão '${wahaSessionName}': ${responseText}`,
+      )
+      let errorMessage = `WAHA API Error (${wahaResponse.status})`
       try {
-        const errorJson = JSON.parse(errorText)
-        errorMessage = errorJson.message || errorText
+        errorMessage = JSON.parse(responseText).message || responseText
       } catch (e) {
-        errorMessage = errorText
+        errorMessage = responseText
       }
-
       return NextResponse.json({ success: false, message: errorMessage }, { status: wahaResponse.status })
     }
 
-    // Process successful response
-    const data = await wahaResponse.json()
-    console.log(`[API] Message sent successfully:`, data)
+    // Processa sucesso
+    console.log(
+      `[API send-message] Resposta OK (${wahaResponse.status}) da WAHA para enviar para '${chatId}' usando sessão '${wahaSessionName}'. Resposta: ${responseText}`,
+    )
+    let responseData = {}
+    try {
+      responseData = JSON.parse(responseText)
+    } catch (e) {
+      responseData = { raw: responseText }
+    }
 
     return NextResponse.json({
       success: true,
-      message: "Message sent successfully",
-      data,
+      message: "Mensagem enviada com sucesso via WAHA.",
+      data: responseData,
     })
   } catch (error) {
-    console.error("[API] Internal error:", error)
+    console.error("[API send-message] Erro interno na rota:", error)
     return NextResponse.json(
       {
         success: false,
-        message: `Error processing message send: ${error instanceof Error ? error.message : "Unknown error"}`,
+        message: "Erro interno no servidor ao enviar mensagem.",
+        error: error instanceof Error ? error.message : String(error),
       },
       { status: 500 },
     )
   }
+}
+
+// Adiciona um GET handler apenas para retornar 405 (Method Not Allowed)
+export async function GET(request: NextRequest) {
+  console.log("[API send-message] Recebido GET request (não permitido).")
+  return NextResponse.json({ message: "Método GET não permitido para esta rota. Use POST." }, { status: 405 })
 }
