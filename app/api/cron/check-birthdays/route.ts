@@ -1,41 +1,46 @@
-// app/api/cron/check-birthdays/route.ts - FIXED VERSION
+// app/api/cron/check-birthdays/route.ts
 import { NextResponse } from "next/server"
 import { db } from "@/lib/firebase-config"
-import { collection, getDocs, query, where, Timestamp, addDoc } from "firebase/firestore"
-import { generateMessageId } from "@/utils/message-id-generator"
-import { personalizeMessage } from "@/utils/message-utils"
+import { collection, getDocs, query, where } from "firebase/firestore"
+// Certifique-se que o caminho está correto para sua estrutura
+import { sendMessage } from "@/utils/message-sender"
 
-// Function to get contacts with birthdays today
+// Função auxiliar para buscar contatos aniversariantes
 async function getUserBirthdayContacts(userEmail: string, currentDay: number, currentMonth: number) {
+  // Coleção de contatos do usuário específico
   const contactsRef = collection(db, `parabenspravoce/${userEmail}/users`)
   const snapshot = await getDocs(contactsRef)
   const birthdayContacts: Array<{ id: string; nome: string; telefone: string; data_de_nascimento: string }> = []
 
   snapshot.docs.forEach((doc) => {
     const contact = doc.data()
-    if (!contact.data_de_nascimento || !contact.telefone) return
+    if (!contact.data_de_nascimento || !contact.telefone) return // Pula se não tiver data ou telefone
 
     let birthDay: number | undefined, birthMonth: number | undefined
     try {
-      const dobString = String(contact.data_de_nascimento).trim()
-
+      const dobString = String(contact.data_de_nascimento).trim() // Garante que é string
       if (dobString.includes("/")) {
+        // Formato DD/MM ou DD/MM/YYYY
         const parts = dobString.split("/")
         if (parts.length >= 2) {
           birthDay = Number.parseInt(parts[0], 10)
           birthMonth = Number.parseInt(parts[1], 10)
         }
       } else if (dobString.includes("-")) {
+        // Formato YYYY-MM-DD (mais comum) ou MM-DD
         const parts = dobString.split("-")
         if (parts.length === 3) {
+          // YYYY-MM-DD
           birthMonth = Number.parseInt(parts[1], 10)
           birthDay = Number.parseInt(parts[2], 10)
         } else if (parts.length === 2) {
+          // MM-DD (menos provável, mas possível)
           birthMonth = Number.parseInt(parts[0], 10)
           birthDay = Number.parseInt(parts[1], 10)
         }
       }
 
+      // Verifica se conseguiu extrair e se é aniversário hoje
       if (
         birthDay !== undefined &&
         birthMonth !== undefined &&
@@ -53,185 +58,69 @@ async function getUserBirthdayContacts(userEmail: string, currentDay: number, cu
       }
     } catch (e) {
       console.error(
-        `[CRON_LOG] Error processing date '${contact.data_de_nascimento}' for contact ${doc.id} of user ${userEmail}:`,
+        `[CRON] Erro ao processar data '${contact.data_de_nascimento}' para contato ${doc.id} do usuário ${userEmail}:`,
         e instanceof Error ? e.message : e,
       )
     }
   })
-
   return birthdayContacts
 }
 
-// Function to get birthday messages from the messages collection
+// Função para buscar mensagens de aniversário
 async function getBirthdayMessages(userEmail: string): Promise<string[]> {
   try {
-    console.log(`[CRON_LOG] Fetching birthday messages from /messages collection for ${userEmail}`)
-
-    // IMPORTANT: Only fetch from the messages collection (from /mensagens page)
-    const messagesRef = collection(db, `parabenspravoce/${userEmail}/messages`)
-
-    // Get all messages from the collection - no filtering by type to ensure we get all messages
-    const snapshot = await getDocs(messagesRef)
+    // Assume que os modelos estão nesta coleção
+    const messagesRef = collection(db, `parabenspravoce/${userEmail}/templates`)
+    // Query para buscar documentos onde o campo 'type' é 'birthday'
+    const q = query(messagesRef, where("type", "==", "birthday"))
+    const snapshot = await getDocs(q)
 
     if (snapshot.empty) {
-      console.log(`[CRON_LOG] No messages found in /messages collection for ${userEmail}`)
+      console.log(`[CRON] Nenhuma mensagem de aniversário (type='birthday') encontrada em /templates para ${userEmail}`)
       return []
     }
 
-    // Extract message content, checking multiple possible field names
     const messages = snapshot.docs
-      .map((doc) => {
-        // Check all possible field names where message content might be stored
-        return doc.data().content || doc.data().conteudo || doc.data().message || ""
-      })
-      .filter((msg): msg is string => typeof msg === "string" && msg.trim() !== "")
+      .map((doc) => doc.data().content || doc.data().message || "") // Pega 'content' ou 'message'
+      .filter((msg): msg is string => typeof msg === "string" && msg.trim() !== "") // Garante que é string não vazia
 
-    console.log(`[CRON_LOG] Found ${messages.length} messages in /messages collection for ${userEmail}`)
-
+    console.log(`[CRON] Encontradas ${messages.length} mensagens de aniversário em /templates para ${userEmail}`)
     return messages
   } catch (error) {
-    console.error(`[CRON_LOG] Error fetching messages from /messages collection for ${userEmail}:`, error)
+    console.error(`[CRON] Erro ao buscar mensagens em /templates para ${userEmail}:`, error)
     return []
   }
 }
 
-// Simple function to send a message (simplified version for this fix)
-async function sendMessage(options: {
-  phoneNumber: string
-  message: string
-  sessionName: string
-  contactId?: string
-  contactName?: string
-  userEmail: string
-  messageId: string
-}) {
-  const { phoneNumber, message, sessionName, contactId, contactName, userEmail, messageId } = options
-
-  try {
-    // Check for duplicates
-    const sentMessagesRef = collection(db, "sent_messages")
-    const q = query(
-      sentMessagesRef,
-      where("messageId", "==", messageId),
-      where("timestamp", ">=", Timestamp.fromDate(new Date(new Date().toISOString().split("T")[0]))),
-    )
-
-    const existingMessages = await getDocs(q)
-    if (!existingMessages.empty) {
-      return {
-        success: true,
-        message: "Message already sent today",
-        duplicated: true,
-        messageId,
-      }
-    }
-
-    // Personalize message if needed
-    const finalMessage = contactName ? personalizeMessage(message, contactName, true) : message
-
-    // Format phone number
-    let chatId = phoneNumber.replace(/\D/g, "")
-    if (!chatId.endsWith("@c.us")) {
-      chatId = `${chatId}@c.us`
-    }
-
-    // Record the message attempt
-    await addDoc(sentMessagesRef, {
-      messageId,
-      phoneNumber,
-      contactId,
-      contactName,
-      userEmail,
-      message: finalMessage.substring(0, 100) + (finalMessage.length > 100 ? "..." : ""),
-      timestamp: Timestamp.now(),
-      status: "sending",
-      sessionName,
-    })
-
-    // Call WhatsApp API
-    const wahaApiUrl = process.env.WAHA_API_URL || "https://api.parabenspravoce.com"
-    const wahaApiKey = process.env.WAHA_API_KEY
-
-    if (!wahaApiKey) {
-      throw new Error("WAHA_API_KEY environment variable not set")
-    }
-
-    const response = await fetch(`${wahaApiUrl}/api/sendText`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        "X-Api-Key": wahaApiKey,
-      },
-      body: JSON.stringify({
-        chatId,
-        text: finalMessage,
-        session: sessionName,
-      }),
-    })
-
-    if (!response.ok) {
-      throw new Error(`WhatsApp API error: ${response.status}`)
-    }
-
-    // Update message status
-    await addDoc(sentMessagesRef, {
-      messageId,
-      status: "sent",
-      updatedAt: Timestamp.now(),
-    })
-
-    return {
-      success: true,
-      message: "Message sent successfully",
-      messageId,
-    }
-  } catch (error) {
-    console.error(`[CRON_LOG] Error sending message:`, error)
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : String(error),
-      messageId,
-    }
-  }
-}
-
+// Handler da Rota (executado pelo Cron)
 export async function GET(request: Request) {
-  console.log("==============================================")
-  console.log("[CRON_LOG] GET request received for check-birthdays")
-  const executionTime = new Date()
-  console.log(`[CRON_LOG] Execution time: ${executionTime.toISOString()}`)
-
-  // Security Check
+  // Verificação de segurança (importante em produção)
   const authHeader = request.headers.get("Authorization")
   const expectedSecretValue = process.env.CRON_SECRET
-
   if (!expectedSecretValue) {
-    console.error("[CRON_LOG] CRON_SECRET missing!")
-    return NextResponse.json({ success: false, error: "Config missing" }, { status: 500 })
+    console.error("[CRON] CRON_SECRET não está definido nas variáveis de ambiente!")
+    return NextResponse.json({ success: false, error: "Configuração de segurança ausente." }, { status: 500 })
   }
-
   const expectedAuth = `Bearer ${expectedSecretValue}`
-  const isVercelCron = request.headers.get("x-vercel-cron") === "true"
+
+  // Permite acesso se for um cron do Vercel OU se o header Authorization estiver correto
+  const isVercelCron = request.headers.get("x-vercel-cron") === "true" // Header específico do Vercel Cron Jobs
   const isValidAuth = authHeader === expectedAuth
 
   if (!isVercelCron && !isValidAuth) {
-    console.warn(`[CRON_LOG] Unauthorized access attempt. Header: ${authHeader}`)
+    console.warn(`[CRON] Tentativa de acesso não autorizado. Header: ${authHeader}`)
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
   }
 
   const authMethod = isVercelCron ? "Vercel Cron" : "Header Authorization"
-  console.log(`[CRON_LOG] Auth OK (${authMethod}). Starting check...`)
+  console.log(`[CRON] Autenticação OK (${authMethod}). Iniciando verificação...`)
 
-  // Time Calculation
+  const executionTime = new Date()
+  // Horário UTC (Vercel roda em UTC) - Ajuste se seu servidor/comparação for local
   const currentHour = executionTime.getUTCHours()
   const currentMinute = executionTime.getUTCMinutes()
   const currentDay = executionTime.getUTCDate()
-  const currentMonth = executionTime.getUTCMonth() + 1
-
-  console.log(
-    `[CRON_LOG] Current UTC Time: ${String(currentHour).padStart(2, "0")}:${String(currentMinute).padStart(2, "0")}. Date: ${currentDay}/${currentMonth}`,
-  )
+  const currentMonth = executionTime.getUTCMonth() + 1 // getUTCMonth é 0-11
 
   const results: Array<{ user: string; contact?: string; status: string; error?: string; messageId?: string }> = []
   let totalMessagesAttempted = 0
@@ -239,102 +128,103 @@ export async function GET(request: Request) {
   let usersProcessed = 0
 
   try {
-    console.log("[CRON_LOG] Fetching user settings...")
     const userSettingsCollection = collection(db, "user_settings")
     const userSettingsSnapshot = await getDocs(userSettingsCollection)
-    console.log(`[CRON_LOG] Found ${userSettingsSnapshot.docs.length} user settings documents.`)
+
+    console.log(
+      `[CRON UTC ${String(currentHour).padStart(2, "0")}:${String(currentMinute).padStart(2, "0")}] Verificando ${userSettingsSnapshot.docs.length} usuários.`,
+    )
 
     for (const userDoc of userSettingsSnapshot.docs) {
       usersProcessed++
       const userEmail = userDoc.id
       const userSettings = userDoc.data()
-      const configuredTime = userSettings?.sendTime ?? "08:00"
-      const sessionName = userSettings?.sessionName || "default"
+      const configuredTime = userSettings?.sendTime ?? "08:00" // Default para 08:00 se não existir
 
-      console.log(
-        `\n[CRON_LOG] Processing User ${usersProcessed}: ${userEmail}. Configured time: ${configuredTime}, SessionName: ${sessionName}`,
-      )
-
-      let configHour = 8
-      let configMinute = 0
-
+      let configHour: number, configMinute: number
       try {
-        if (typeof configuredTime === "string" && configuredTime.includes(":")) {
-          const timeParts = configuredTime.split(":")
-          configHour = Number.parseInt(timeParts[0], 10)
-          configMinute = Number.parseInt(timeParts[1], 10)
-
-          if (isNaN(configHour) || isNaN(configMinute)) {
-            throw new Error("Hour/Minute are not numbers")
-          }
+        if (typeof configuredTime !== "string" || !configuredTime.includes(":")) {
+          throw new Error("Formato de hora inválido")
+        }
+        ;[configHour, configMinute] = configuredTime.split(":").map(Number)
+        if (isNaN(configHour) || isNaN(configMinute)) {
+          throw new Error("Hora/Minuto não são números")
         }
       } catch (e) {
         console.error(
-          `[CRON_LOG] Invalid time ('${configuredTime}') for ${userEmail}. Error:`,
+          `[CRON] Hora inválida ('${configuredTime}') para ${userEmail}. Erro:`,
           e instanceof Error ? e.message : e,
         )
-        results.push({ user: userEmail, status: "error_config", error: `Invalid time: ${configuredTime}` })
-        continue
+        results.push({ user: userEmail, status: "error_config", error: `Hora inválida: ${configuredTime}` })
+        continue // Pula para o próximo usuário
       }
 
-      // Exact Time Check
+      // *** CORREÇÃO PRINCIPAL: Comparação EXATA de hora e minuto (considerando UTC) ***
       const isTimeToSend = configHour === currentHour && configMinute === currentMinute
-      console.log(
-        `[CRON_LOG] Time Check for ${userEmail}: (Config: ${configHour}:${configMinute} vs Current UTC: ${currentHour}:${currentMinute}) -> isTimeToSend: ${isTimeToSend}`,
-      )
 
       if (!isTimeToSend) {
-        continue // Skip user if time doesn't match
+        // Log apenas se quiser debugar todos os usuários
+        // console.log(`[CRON] Horário não corresponde para ${userEmail} (Config UTC: ${configHour}:${configMinute} / Atual UTC: ${currentHour}:${currentMinute})`)
+        continue // Pula para o próximo usuário
       }
 
-      console.log(`[CRON_LOG] TIME MATCH for ${userEmail}! Fetching contacts...`)
+      // Horário correspondeu, processar este usuário
+      console.log(
+        `[CRON] Horário CORRESPONDE para ${userEmail} (UTC ${configHour}:${configMinute}). Buscando aniversariantes...`,
+      )
 
       try {
         const birthdayContacts = await getUserBirthdayContacts(userEmail, currentDay, currentMonth)
-        console.log(`[CRON_LOG] Found ${birthdayContacts.length} birthday contacts for ${userEmail}.`)
 
-        if (birthdayContacts.length === 0) continue
-
-        console.log(`[CRON_LOG] Fetching messages for ${userEmail}...`)
-        const birthdayMessages = await getBirthdayMessages(userEmail)
-        console.log(`[CRON_LOG] Found ${birthdayMessages.length} message templates for ${userEmail}.`)
-
-        if (birthdayMessages.length === 0) {
-          results.push({ user: userEmail, status: "error_config", error: "No birthday messages configured" })
+        if (birthdayContacts.length === 0) {
+          console.log(`[CRON] Nenhum aniversariante hoje para ${userEmail}.`)
           continue
         }
 
-        // Send to each contact
+        console.log(
+          `[CRON] ${birthdayContacts.length} aniversariantes para ${userEmail}: ${birthdayContacts.map((c) => c.nome).join(", ")}. Buscando mensagens...`,
+        )
+
+        const birthdayMessages = await getBirthdayMessages(userEmail)
+
+        if (birthdayMessages.length === 0) {
+          console.log(`[CRON] Nenhuma mensagem de aniversário configurada para ${userEmail}.`)
+          results.push({
+            user: userEmail,
+            status: "error_config",
+            error: "Nenhuma mensagem de aniversário configurada",
+          })
+          continue
+        }
+
+        // Enviar para cada contato
         for (const contact of birthdayContacts) {
           totalMessagesAttempted++
           const randomIndex = Math.floor(Math.random() * birthdayMessages.length)
           const messageTemplate = birthdayMessages[randomIndex]
 
-          // Generate a unique ID for this birthday message
-          const messageId = generateMessageId("birthday", userEmail, contact.id)
-
-          // Call the sendMessage function with the unique ID
+          // Chamar a função sendMessage centralizada
           const sendResult = await sendMessage({
-            phoneNumber: contact.telefone,
-            message: messageTemplate,
-            sessionName: sessionName,
-            contactId: contact.id,
+            userEmail,
+            contactId: contact.id, // Passando ID do contato do Firestore
             contactName: contact.nome,
-            userEmail: userEmail,
-            messageId: messageId,
+            contactPhone: contact.telefone,
+            message: messageTemplate, // Passando o template
+            usePersonalization: true, // Habilita personalização como {nome}
+            messageType: "birthday", // Tipo para deduplicação
+            sessionName: userSettings?.sessionName, // Busca o nome da sessão salva nas configurações do usuário
           })
 
           if (sendResult.success) {
             if (!sendResult.duplicated) {
-              // Count only if not duplicated
+              // Conta apenas se não for duplicado
               totalMessagesSent++
-              console.log(`[CRON] ✅ Message sent to ${contact.nome} (${userEmail}). ID: ${sendResult.messageId}`)
+              console.log(`[CRON] ✅ Mensagem enviada para ${contact.nome} (${userEmail}). ID: ${sendResult.messageId}`)
             } else {
               console.log(
-                `[CRON] ⏭️ Message for ${contact.nome} (${userEmail}) already sent today (deduplicated). ID: ${sendResult.messageId}`,
+                `[CRON] ⏭️ Mensagem para ${contact.nome} (${userEmail}) já enviada hoje (deduplicada). ID: ${sendResult.messageId}`,
               )
             }
-
             results.push({
               user: userEmail,
               contact: contact.nome,
@@ -349,39 +239,36 @@ export async function GET(request: Request) {
               error: sendResult.message,
               messageId: sendResult.messageId,
             })
-
             console.error(
-              `[CRON] ❌ Failed to send to ${contact.nome} (${userEmail}): ${sendResult.message}. ID: ${sendResult.messageId}`,
+              `[CRON] ❌ Falha ao enviar para ${contact.nome} (${userEmail}): ${sendResult.message}. ID: ${sendResult.messageId}`,
             )
           }
-        } // End contact loop
+          // Pequena pausa para não sobrecarregar a API WAHA (opcional, ajuste conforme necessário)
+          // await new Promise(resolve => setTimeout(resolve, 200));
+        }
       } catch (userError) {
-        console.error(`[CRON_LOG] Error processing user ${userEmail} after time match:`, userError)
+        console.error(`[CRON] Erro processando ${userEmail}:`, userError)
         results.push({
           user: userEmail,
           status: "error_user_processing",
           error: userError instanceof Error ? userError.message : String(userError),
         })
       }
-    } // End user loop
+    } // Fim do loop for users
 
     console.log(
-      `[CRON_LOG] Check finished. Processed: ${usersProcessed}. Attempted: ${totalMessagesAttempted}. Sent New: ${totalMessagesSent}.`,
+      `[CRON] Verificação concluída. ${usersProcessed} usuários verificados. ${totalMessagesSent} mensagens novas enviadas (${totalMessagesAttempted} tentativas totais).`,
     )
-    console.log("==============================================")
-
     return NextResponse.json({
       success: true,
       timestamp: executionTime.toISOString(),
       checkedUsers: usersProcessed,
       messagesAttempted: totalMessagesAttempted,
-      messagesSent: totalMessagesSent,
+      messagesSent: totalMessagesSent, // Mensagens realmente enviadas (não duplicadas)
       details: results,
     })
   } catch (error) {
-    console.error("[CRON_LOG] GENERAL CRON ERROR:", error)
-    console.log("==============================================")
-
+    console.error("[CRON] Erro GERAL:", error)
     return NextResponse.json(
       {
         success: false,

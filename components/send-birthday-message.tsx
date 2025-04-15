@@ -9,7 +9,6 @@ import { useToast } from "@/hooks/use-toast"
 import { Send, Loader2, Gift } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { sendMessage } from "@/utils/message-sender"
-import { generateMessageId } from "@/utils/message-id-generator" // Import the new utility
 
 interface SendBirthdayMessageProps {
   contactId: string
@@ -23,17 +22,18 @@ interface SendBirthdayMessageProps {
 const birthdayMessages = [
   {
     id: 1,
-    content: "Feliz aniversário! Que Deus abençoe sua vida com muita saúde, paz e alegria neste novo ano de vida.",
+    content:
+      "COMPONTE SEND BIRHT 1 Feliz aniversário! Que Deus abençoe sua vida com muita saúde, paz e alegria neste novo ano de vida.",
   },
   {
     id: 2,
     content:
-      "Parabéns pelo seu dia! Desejamos a você um ano repleto de conquistas e momentos felizes. Conte sempre conosco!",
+      "COMPONTE SEND BIRHT 2  Parabéns pelo seu dia! Desejamos a você um ano repleto de conquistas e momentos felizes. Conte sempre conosco!",
   },
   {
     id: 3,
     content:
-      "Felicitações pelo seu aniversário! Que este novo ciclo seja marcado por bênçãos e realizações. Estamos orando por você!",
+      "COMPONTE SEND BIRHT 3 Felicitações pelo seu aniversário! Que este novo ciclo seja marcado por bênçãos e realizações. Estamos orando por você!",
   },
 ]
 
@@ -74,38 +74,14 @@ export function SendBirthdayMessage({
 
     try {
       const finalMessage = replacePlaceholders(getCurrentMessage())
+      await sendMessage(contactPhone, finalMessage, user?.email, contactId, contactName)
 
-      // IMPROVED: Use the utility function to generate a consistent message ID
-      const messageId = generateMessageId("manual_birthday", user?.email || "", contactId)
-
-      // Chamar a função sendMessage com o ID único
-      const sendResult = await sendMessage({
-        phoneNumber: contactPhone,
-        message: finalMessage,
-        userEmail: user?.email || "",
-        contactId: contactId,
-        contactName: contactName,
-        sessionName: "default", // Usar sessão padrão ou obter de configurações
-        uniqueId: messageId, // Passar o ID único para garantir deduplicação
+      toast({
+        title: "Mensagem enviada!",
+        description: `Mensagem de aniversário enviada para ${contactName}.`,
       })
 
-      if (sendResult.success) {
-        if (sendResult.duplicated) {
-          toast({
-            title: "Mensagem já enviada",
-            description: `Uma mensagem já foi enviada para ${contactName} hoje.`,
-          })
-        } else {
-          toast({
-            title: "Mensagem enviada!",
-            description: `Mensagem de aniversário enviada para ${contactName}.`,
-          })
-        }
-
-        if (onSuccess) onSuccess()
-      } else {
-        throw new Error(sendResult.message || "Erro desconhecido ao enviar mensagem.")
-      }
+      if (onSuccess) onSuccess()
     } catch (err: any) {
       console.error("Erro ao enviar mensagem de aniversário:", err)
       setError(err.message || "Erro desconhecido ao enviar mensagem.")
