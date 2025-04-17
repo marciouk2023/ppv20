@@ -4,6 +4,77 @@ import { db } from "@/lib/firebase-config"
 import { collection, getDocs, Timestamp, doc, setDoc, runTransaction, getDoc } from "firebase/firestore"
 import { personalizeMessage } from "@/utils/message-utils"
 
+// Adicionar a nova função getUserExecutionLock após as importações
+async function getUserExecutionLock(userEmail: string): Promise<boolean> {
+  try {
+    const today = new Date().toISOString().split("T")[0]
+    const lockId = `execution_${userEmail}_${today}`
+    const lockRef = doc(db, "execution_locks", lockId)
+
+    // Verificar se já existe um lock para hoje
+    const lockDoc = await getDoc(lockRef)
+
+    if (lockDoc.exists()) {
+      const lastExecution = lockDoc.data().timestamp.toDate()
+      const now = new Date()
+      const hoursSinceLastExecution = (now.getTime() - lastExecution.getTime()) / (1000 * 60 * 60)
+
+      // Se já foi executado nas últimas 23 horas, não execute novamente
+      if (hoursSinceLastExecution < 23) {
+        console.log(
+          `[CRON_LOG] User ${userEmail} already processed today (${hoursSinceLastExecution.toFixed(2)} hours ago).`,
+        )
+        return false
+      }
+    }
+
+    // Criar o lock para o dia
+    await setDoc(lockRef, {
+      timestamp: Timestamp.now(),
+      userEmail,
+      date: today,
+    })
+
+    return true
+  } catch (error) {
+    console.error(`[CRON_LOG] Error with execution lock:`, error)
+    return true // Em caso de erro, permite executar
+  }
+}
+
+// Substituir a função recordMessageSent
+async function recordMessageSent(
+  userEmail: string,
+  contactId: string,
+  contactName: string,
+  phoneNumber: string,
+  messageContent: string,
+) {
+  try {
+    const today = new Date().toISOString().split("T")[0]
+    const recordId = `birthday_${userEmail}_${contactId}_${today}`
+
+    // Use setDoc com um ID específico de documento para evitar duplicatas
+    await setDoc(doc(db, "sent_messages", recordId), {
+      messageId: recordId,
+      userEmail,
+      contactId,
+      contactName,
+      phoneNumber,
+      message: messageContent.substring(0, 100) + (messageContent.length > 100 ? "..." : ""),
+      timestamp: Timestamp.now(),
+      status: "sent",
+      type: "birthday",
+      sentBy: "cron",
+    })
+
+    return recordId
+  } catch (error) {
+    console.error(`[CRON_LOG] Error recording message sent:`, error)
+    throw error
+  }
+}
+
 // Function to get contacts with birthdays today
 async function getUserBirthdayContacts(userEmail: string, currentDay: number, currentMonth: number) {
   const contactsRef = collection(db, `parabenspravoce/${userEmail}/users`)
@@ -107,7 +178,7 @@ async function wasMessageSentToContactToday(userEmail: string, contactId: string
     return docSnap.exists()
   } catch (error) {
     console.error(`[CRON_LOG] Error checking if message was sent to contact today:`, error)
-    return false
+    return false // Assume não foi enviado em caso de erro
   }
 }
 
@@ -305,6 +376,22 @@ async function acquireLock(userEmail: string, contactId: string, executionId: st
   }
 }
 
+// Função para verificar se o horário atual está dentro da janela permitida
+function isWithinTimeWindow(
+  configHour: number,
+  configMinute: number,
+  currentHour: number,
+  currentMinute: number,
+): boolean {
+  // Converte horas e minutos para minutos totais para facilitar a comparação
+  const configTotalMinutes = configHour * 60 + configMinute
+  const currentTotalMinutes = currentHour * 60 + currentMinute
+
+  // Janela de tempo de 5 minutos
+  // Verifica se o tempo atual está dentro de uma janela de 5 minutos a partir do tempo configurado
+  return Math.abs(currentTotalMinutes - configTotalMinutes) <= 5
+}
+
 export async function GET(request: Request) {
   // Generate a unique execution ID
   const executionId = `exec_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
@@ -363,6 +450,8 @@ export async function GET(request: Request) {
       const configuredTime = userSettings?.sendTime ?? "08:00"
       const sessionName = userSettings?.sessionName || "default"
 
+      // Adicionar log para início do processamento de cada usuário
+      console.log(`[CRON_LOG][${executionId}] === STARTING PROCESSING FOR USER: ${userEmail} ===`)
       console.log(
         `\n[CRON_LOG][${executionId}] Processing User ${usersProcessed}: ${userEmail}. Configured time: ${configuredTime}, SessionName: ${sessionName}`,
       )
@@ -389,23 +478,48 @@ export async function GET(request: Request) {
         continue
       }
 
-      // Exact Time Check
-      const isTimeToSend = configHour === currentHour && configMinute === currentMinute
+      // MODIFIED: Verificar se o horário atual está dentro da janela de tempo permitida
+      const isTimeToSend = isWithinTimeWindow(configHour, configMinute, currentHour, currentMinute)
+
       console.log(
         `[CRON_LOG][${executionId}] Time Check for ${userEmail}: (Config: ${configHour}:${configMinute} vs Current UTC: ${currentHour}:${currentMinute}) -> isTimeToSend: ${isTimeToSend}`,
       )
 
       if (!isTimeToSend) {
+        // Adicionar log de fim de processamento para este usuário
+        console.log(`[CRON_LOG][${executionId}] === FINISHED PROCESSING FOR USER: ${userEmail} - Time not matched ===`)
         continue // Skip user if time doesn't match
       }
 
       console.log(`[CRON_LOG][${executionId}] TIME MATCH for ${userEmail}! Fetching contacts...`)
 
+      // Verificar se esse usuário já foi processado hoje
+      const canExecute = await getUserExecutionLock(userEmail)
+      if (!canExecute) {
+        console.log(`[CRON_LOG][${executionId}] Skipping user ${userEmail} - already processed today.`)
+        results.push({
+          user: userEmail,
+          status: "skipped_already_processed",
+        })
+
+        // Adicionar log de fim de processamento para este usuário
+        console.log(
+          `[CRON_LOG][${executionId}] === FINISHED PROCESSING FOR USER: ${userEmail} - Already processed today ===`,
+        )
+        continue // Pular para o próximo usuário
+      }
+
       try {
         const birthdayContacts = await getUserBirthdayContacts(userEmail, currentDay, currentMonth)
         console.log(`[CRON_LOG][${executionId}] Found ${birthdayContacts.length} birthday contacts for ${userEmail}.`)
 
-        if (birthdayContacts.length === 0) continue
+        if (birthdayContacts.length === 0) {
+          // Adicionar log de fim de processamento para este usuário
+          console.log(
+            `[CRON_LOG][${executionId}] === FINISHED PROCESSING FOR USER: ${userEmail} - No birthday contacts ===`,
+          )
+          continue
+        }
 
         console.log(`[CRON_LOG][${executionId}] Fetching messages for ${userEmail}...`)
         const birthdayMessages = await getBirthdayMessages(userEmail)
@@ -413,6 +527,10 @@ export async function GET(request: Request) {
 
         if (birthdayMessages.length === 0) {
           results.push({ user: userEmail, status: "error_config", error: "No birthday messages configured" })
+          // Adicionar log de fim de processamento para este usuário
+          console.log(
+            `[CRON_LOG][${executionId}] === FINISHED PROCESSING FOR USER: ${userEmail} - No messages configured ===`,
+          )
           continue
         }
 
@@ -505,7 +623,10 @@ export async function GET(request: Request) {
           error: userError instanceof Error ? userError.message : String(userError),
         })
       }
-    } // End user loop
+
+      // Adicionar log de fim de processamento para este usuário
+      console.log(`[CRON_LOG][${executionId}] === FINISHED PROCESSING FOR USER: ${userEmail} ===`)
+    } // End user loop mesmo
 
     console.log(
       `[CRON_LOG][${executionId}] Check finished. Processed: ${usersProcessed}. Attempted: ${totalMessagesAttempted}. Sent New: ${totalMessagesSent}.`,
