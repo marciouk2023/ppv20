@@ -52,7 +52,7 @@ function ConnectionStatusBadge({
             // Use VERCEL_URL if available, otherwise fallback
             const apiUrl = "/api" // Sempre use a API local, que fará o proxy corretamente
 
-            const sessionEndpoint = `${apiUrl}/api/whatsapp/sessions/${userSession.sessionName}/status`
+            const sessionEndpoint = `${apiUrl}/whatsapp/sessions/${userSession.sessionName}/status`
             console.log(`[StatusBadge] Checking endpoint: ${sessionEndpoint}`) // Debug URL
             const response = await fetch(sessionEndpoint, {
               cache: "no-store", // Ensure fresh data
@@ -229,7 +229,7 @@ export default function ConfiguracoesPage() {
         ) {
           try {
             const apiUrl = "/api" // Sempre use a API local, que fará o proxy corretamente
-            const statusEndpoint = `${apiUrl}/api/whatsapp/sessions/${sessionInfo.sessionName}/status`
+            const statusEndpoint = `${apiUrl}/whatsapp/sessions/${sessionInfo.sessionName}/status`
             console.log(`[StatusBadge] Checking endpoint: ${statusEndpoint}`) // Debug URL
             const response = await fetch(statusEndpoint, { cache: "no-store" })
 
@@ -353,7 +353,7 @@ export default function ConfiguracoesPage() {
       const apiUrl = "/api" // Sempre use a API local, que fará o proxy corretamente
 
       // Call API to start session (might return QR directly or require polling)
-      const startSessionResponse = await fetch(`${apiUrl}/api/whatsapp/generate-qr`, {
+      const startSessionResponse = await fetch(`${apiUrl}/whatsapp/generate-qr`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -455,7 +455,7 @@ export default function ConfiguracoesPage() {
           ? sessionNameToCheck.substring(8)
           : sessionNameToCheck
 
-        const statusEndpoint = `${apiUrl}/api/whatsapp/sessions/${wahaSessionName}/status`
+        const statusEndpoint = `${apiUrl}/whatsapp/sessions/${wahaSessionName}/status`
         console.log(`[StatusCheck] Checking endpoint: ${statusEndpoint}`)
         const statusResponse = await fetch(statusEndpoint, { cache: "no-store" })
 

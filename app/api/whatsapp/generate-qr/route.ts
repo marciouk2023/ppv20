@@ -1,134 +1,123 @@
 import { NextResponse } from "next/server"
-import { WAHA_CONFIG } from "@/lib/wahaConfig"
 import { saveUserSession } from "@/lib/session-manager"
-import https from "https"
+
+// Lê a URL e a Chave do ambiente (disponível apenas no backend)
+const WAHA_API_URL = process.env.WAHA_API_URL
+const WAHA_API_KEY = process.env.WAHA_API_KEY
 
 export async function POST(request: Request) {
   try {
-    const agent = new https.Agent({ rejectUnauthorized: false })
-    const data = await request.json()
-    const { sessionName, userEmail } = data
+    // Parse request body
+    const body = await request.json()
+    const { sessionName, userEmail } = body
 
     if (!sessionName) {
-      return NextResponse.json({ success: false, error: "Nome da sessão não fornecido" }, { status: 400 })
+      return NextResponse.json({ success: false, message: "Nome da sessão não fornecido" }, { status: 400 })
     }
 
-    if (!userEmail) {
-      return NextResponse.json({ success: false, error: "Email do usuário não fornecido" }, { status: 400 })
-    }
-
-    console.log(`[API /generate-qr] Iniciando sessão: ${sessionName} para usuário: ${userEmail}`)
-
-    // Remover o prefixo "session_" se existir
-    const wahaSessionName = sessionName.startsWith("session_") ? sessionName.substring(8) : sessionName
-
-    // 1. Iniciar a sessão na API WAHA
-    const startSessionUrl = `${WAHA_CONFIG.API_URL}/api/sessions/start`
-    console.log(`[API /generate-qr] Chamando API para iniciar sessão: POST ${startSessionUrl}`)
-
-    const startResponse = await fetch(startSessionUrl, {
-      method: "POST",
-      // @ts-ignore
-      agent,
-      headers: {
-        "Content-Type": "application/json",
-        "X-Api-Key": WAHA_CONFIG.API_KEY,
-      },
-      body: JSON.stringify({
-        name: wahaSessionName, // Enviar sem o prefixo
-      }),
-    })
-
-    if (!startResponse.ok) {
-      const errorText = await startResponse.text()
-      console.error(`[API /generate-qr] Erro ao iniciar sessão (${startResponse.status}): ${errorText}`)
+    // Verifica se a URL base da API WAHA foi configurada
+    if (!WAHA_API_URL) {
+      console.error("[API Proxy /api/whatsapp/generate-qr] Erro: WAHA_API_URL não está configurada")
       return NextResponse.json(
-        { success: false, error: `Erro ao iniciar sessão: ${errorText}` },
-        { status: startResponse.status },
+        { success: false, message: "Configuração interna do servidor incompleta: WAHA API URL não definida." },
+        { status: 500 },
       )
     }
 
-    // 2. Salvar a associação do usuário com a sessão
-    await saveUserSession(userEmail, sessionName, "STARTING")
-    console.log(`[API /generate-qr] Sessão ${sessionName} associada ao usuário ${userEmail}`)
+    console.log(`[API Proxy /api/whatsapp/generate-qr] Iniciando sessão: ${sessionName}`)
 
-    // 3. Obter o QR code
-    // Aguardar um pouco para a sessão iniciar
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+    // Prepara os cabeçalhos para a chamada à API WAHA
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    }
 
-    const qrUrl = `${WAHA_CONFIG.API_URL}/api/${wahaSessionName}/auth/qr`
-    console.log(`[API /generate-qr] Obtendo QR code: GET ${qrUrl}`)
+    // Adiciona cabeçalho de autenticação se a chave estiver definida
+    if (WAHA_API_KEY) {
+      headers["Authorization"] = `Bearer ${WAHA_API_KEY}`
+      console.log(`[API Proxy /api/whatsapp/generate-qr] Enviando requisição com chave de API`)
+    }
 
-    const qrResponse = await fetch(qrUrl, {
-      method: "GET",
-      // @ts-ignore
-      agent,
-      headers: {
-        Accept: "image/png",
-        "X-Api-Key": WAHA_CONFIG.API_KEY,
-      },
+    // Define a URL para iniciar a sessão
+    const wahaEndpoint = `${WAHA_API_URL}/api/sessions/start`
+    console.log(`[API Proxy /api/whatsapp/generate-qr] Chamando WAHA: POST ${wahaEndpoint}`)
+
+    // Faz a chamada fetch para a API WAHA
+    const wahaResponse = await fetch(wahaEndpoint, {
+      method: "POST",
+      headers: headers,
+      body: JSON.stringify({ name: sessionName }),
+      cache: "no-store", // Não usar cache para esta operação
     })
 
-    // Se a sessão já estiver conectada, retornar essa informação
-    if (qrResponse.status === 409 || qrResponse.status === 422) {
-      console.log(`[API /generate-qr] Sessão ${wahaSessionName} já está conectada ou em uso`)
-      return NextResponse.json({
-        success: true,
-        status: "CONNECTED",
-        message: "Sessão já está conectada ou em uso",
-      })
+    // Se a resposta não for OK, trata como erro
+    if (!wahaResponse.ok) {
+      const errorText = await wahaResponse.text()
+      console.error(`[API Proxy /api/whatsapp/generate-qr] Erro da API WAHA (${wahaResponse.status}):`, errorText)
+
+      let errorMessage = `WAHA API Error (${wahaResponse.status})`
+      try {
+        const errorJson = JSON.parse(errorText)
+        errorMessage = errorJson.message || errorText
+      } catch (e) {
+        errorMessage = errorText
+      }
+
+      return NextResponse.json({ success: false, message: errorMessage }, { status: wahaResponse.status })
     }
+
+    // Processa a resposta bem-sucedida
+    const startSessionData = await wahaResponse.json()
+    console.log(`[API Proxy /api/whatsapp/generate-qr] Sessão iniciada com sucesso: ${sessionName}`)
+
+    // Agora, obtenha o QR code para a sessão
+    const qrEndpoint = `${WAHA_API_URL}/api/sessions/${sessionName}/qr`
+    console.log(`[API Proxy /api/whatsapp/generate-qr] Obtendo QR code: GET ${qrEndpoint}`)
+
+    const qrResponse = await fetch(qrEndpoint, {
+      method: "GET",
+      headers: headers,
+      cache: "no-store",
+    })
 
     if (!qrResponse.ok) {
       const errorText = await qrResponse.text()
-      console.error(`[API /generate-qr] Erro ao obter QR code (${qrResponse.status}): ${errorText}`)
-      return NextResponse.json(
-        { success: false, error: `Erro ao obter QR code: ${errorText}` },
-        { status: qrResponse.status },
-      )
-    }
+      console.error(`[API Proxy /api/whatsapp/generate-qr] Erro ao obter QR code (${qrResponse.status}):`, errorText)
 
-    // Verificar se a resposta é uma imagem
-    const contentType = qrResponse.headers.get("content-type") || ""
-    if (contentType.includes("image")) {
-      console.log(`[API /generate-qr] QR code obtido com sucesso como imagem`)
-
-      // Converter para base64
-      const imageBuffer = await qrResponse.arrayBuffer()
-      const base64Image = Buffer.from(imageBuffer).toString("base64")
-
-      return NextResponse.json({
-        success: true,
-        qrCode: `data:${contentType};base64,${base64Image}`,
-        sessionName: sessionName,
-      })
-    } else {
-      // Se não for imagem, tentar processar como JSON
-      const responseText = await qrResponse.text()
-      console.log(`[API /generate-qr] Resposta não é imagem: ${responseText}`)
-
+      let errorMessage = `WAHA API Error (${qrResponse.status})`
       try {
-        const jsonData = JSON.parse(responseText)
-        return NextResponse.json({
-          success: true,
-          ...jsonData,
-          sessionName: sessionName,
-        })
+        const errorJson = JSON.parse(errorText)
+        errorMessage = errorJson.message || errorText
       } catch (e) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "Resposta inesperada ao obter QR code",
-            rawResponse: responseText,
-          },
-          { status: 500 },
-        )
+        errorMessage = errorText
       }
+
+      return NextResponse.json({ success: false, message: errorMessage }, { status: qrResponse.status })
     }
+
+    const qrData = await qrResponse.json()
+    console.log(`[API Proxy /api/whatsapp/generate-qr] QR code obtido com sucesso para sessão: ${sessionName}`)
+
+    // Se o usuário foi fornecido, salve a associação no Firestore
+    if (userEmail) {
+      await saveUserSession(userEmail, sessionName)
+      console.log(`[API Proxy /api/whatsapp/generate-qr] Associação de sessão salva para usuário: ${userEmail}`)
+    }
+
+    // Retorna os dados combinados
+    return NextResponse.json({
+      success: true,
+      sessionName,
+      ...qrData,
+    })
   } catch (error) {
-    console.error("Erro ao gerar QR code:", error)
+    console.error(`[API Proxy /api/whatsapp/generate-qr] Erro interno:`, error)
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Erro desconhecido" },
+      {
+        success: false,
+        message: "Erro interno ao processar solicitação de QR code",
+        error: error instanceof Error ? error.message : String(error),
+      },
       { status: 500 },
     )
   }
