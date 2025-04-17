@@ -1,7 +1,7 @@
 // app/api/cron/check-birthdays/route.ts - FIXED VERSION
 import { NextResponse } from "next/server"
 import { db } from "@/lib/firebase-config"
-import { collection, getDocs, query, where, Timestamp, doc, setDoc } from "firebase/firestore"
+import { collection, getDocs, Timestamp, doc, setDoc, runTransaction, getDoc } from "firebase/firestore"
 import { personalizeMessage } from "@/utils/message-utils"
 
 // Function to get contacts with birthdays today
@@ -94,63 +94,85 @@ async function getBirthdayMessages(userEmail: string): Promise<string[]> {
   }
 }
 
-// Check if a message was already sent to a contact today
+// Check if a message was already sent to a contact today - UPDATED VERSION
 async function wasMessageSentToContactToday(userEmail: string, contactId: string): Promise<boolean> {
   try {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    const today = new Date().toISOString().split("T")[0]
+    const messageId = `birthday_${userEmail}_${contactId}_${today}`
 
-    // Create a simple ID format that doesn't depend on message content
-    const baseId = `birthday_${userEmail}_${contactId}`
+    // Verificar diretamente se o documento existe com este ID específico
+    const messageDocRef = doc(db, "sent_messages", messageId)
+    const docSnap = await getDoc(messageDocRef)
 
-    // Check for ANY message sent to this contact today
-    const sentMessagesRef = collection(db, "sent_messages")
-    const q = query(
-      sentMessagesRef,
-      where("userEmail", "==", userEmail),
-      where("contactId", "==", contactId),
-      where("timestamp", ">=", Timestamp.fromDate(today)),
-      where("status", "in", ["sent", "sending"]),
-    )
-
-    const snapshot = await getDocs(q)
-    return !snapshot.empty
+    return docSnap.exists()
   } catch (error) {
     console.error(`[CRON_LOG] Error checking if message was sent to contact today:`, error)
-    return false // Assume no message was sent in case of error
+    return false
   }
 }
 
-// Record that a message was sent to a contact today
-async function recordMessageSent(
+// NEW FUNCTION: Check and record message in a single atomic transaction
+async function checkAndRecordMessage(
   userEmail: string,
   contactId: string,
   contactName: string,
   phoneNumber: string,
   messageContent: string,
-) {
-  try {
-    const today = new Date().toISOString().split("T")[0]
-    const recordId = `birthday_${userEmail}_${contactId}_${today}`
+): Promise<{ success: boolean; messageId?: string }> {
+  const today = new Date().toISOString().split("T")[0]
+  const messageId = `birthday_${userEmail}_${contactId}_${today}`
+  const messageDocRef = doc(db, "sent_messages", messageId)
 
-    // Use setDoc with a specific document ID to avoid duplicates
-    await setDoc(doc(db, "sent_messages", recordId), {
-      messageId: recordId,
-      userEmail,
-      contactId,
-      contactName,
-      phoneNumber,
-      message: messageContent.substring(0, 100) + (messageContent.length > 100 ? "..." : ""),
-      timestamp: Timestamp.now(),
-      status: "sent",
-      type: "birthday",
-      sentBy: "cron",
+  try {
+    const result = await runTransaction(db, async (transaction) => {
+      const docSnap = await transaction.get(messageDocRef)
+
+      if (docSnap.exists()) {
+        // Já existe uma mensagem enviada hoje
+        return { success: false, reason: "already_exists" }
+      }
+
+      // Documento não existe, podemos criar
+      transaction.set(messageDocRef, {
+        messageId,
+        userEmail,
+        contactId,
+        contactName,
+        phoneNumber,
+        message: messageContent.substring(0, 100) + (messageContent.length > 100 ? "..." : ""),
+        timestamp: Timestamp.now(),
+        status: "sending", // Inicialmente marcamos como "sending"
+        type: "birthday",
+        sentBy: "cron",
+      })
+
+      return { success: true, messageId }
     })
 
-    return recordId
+    return result
   } catch (error) {
-    console.error(`[CRON_LOG] Error recording message sent:`, error)
-    throw error
+    console.error(`[CRON_LOG] Error in checkAndRecordMessage:`, error)
+    return { success: false, reason: "transaction_error" }
+  }
+}
+
+// Update message status after sending
+async function updateMessageStatus(messageId: string, status: string, error?: string): Promise<void> {
+  try {
+    const messageDocRef = doc(db, "sent_messages", messageId)
+
+    const updateData: Record<string, any> = {
+      status,
+      updatedAt: Timestamp.now(),
+    }
+
+    if (error) {
+      updateData.error = error
+    }
+
+    await setDoc(messageDocRef, updateData, { merge: true })
+  } catch (error) {
+    console.error(`[CRON_LOG] Error updating message status:`, error)
   }
 }
 
@@ -162,8 +184,10 @@ async function sendMessage(options: {
   contactId: string
   contactName: string
   userEmail: string
+  messageId: string
+  executionId: string
 }) {
-  const { phoneNumber, message, sessionName, contactId, contactName, userEmail } = options
+  const { phoneNumber, message, sessionName, contactId, contactName, userEmail, messageId, executionId } = options
 
   try {
     // Personalize message if needed
@@ -174,6 +198,8 @@ async function sendMessage(options: {
     if (!chatId.endsWith("@c.us")) {
       chatId = `${chatId}@c.us`
     }
+
+    console.log(`[CRON_LOG][${executionId}] Sending message to ${contactName} (${phoneNumber})`)
 
     // Call WhatsApp API
     const wahaApiUrl = process.env.WAHA_API_URL || "https://api.parabenspravoce.com"
@@ -198,11 +224,12 @@ async function sendMessage(options: {
     })
 
     if (!response.ok) {
+      await updateMessageStatus(messageId, "failed", `WhatsApp API error: ${response.status}`)
       throw new Error(`WhatsApp API error: ${response.status}`)
     }
 
-    // Record the message
-    const messageId = await recordMessageSent(userEmail, contactId, contactName, phoneNumber, finalMessage)
+    // Update message status to sent
+    await updateMessageStatus(messageId, "sent")
 
     return {
       success: true,
@@ -210,7 +237,15 @@ async function sendMessage(options: {
       messageId,
     }
   } catch (error) {
-    console.error(`[CRON_LOG] Error sending message:`, error)
+    console.error(`[CRON_LOG][${executionId}] Error sending message:`, error)
+
+    // Ensure we update the status even if there's an error
+    try {
+      await updateMessageStatus(messageId, "failed", error instanceof Error ? error.message : String(error))
+    } catch (statusError) {
+      console.error(`[CRON_LOG][${executionId}] Failed to update message status:`, statusError)
+    }
+
     return {
       success: false,
       message: error instanceof Error ? error.message : String(error),
@@ -218,18 +253,73 @@ async function sendMessage(options: {
   }
 }
 
+// Function to acquire a lock for a specific user and contact
+async function acquireLock(userEmail: string, contactId: string, executionId: string): Promise<boolean> {
+  try {
+    const today = new Date().toISOString().split("T")[0]
+    const lockId = `lock_${userEmail}_${contactId}_${today}`
+    const lockRef = doc(db, "message_locks", lockId)
+
+    console.log(`[CRON_LOG][${executionId}] Attempting to acquire lock: ${lockId}`)
+
+    // Tente criar o documento de bloqueio com uma expiração
+    const now = new Date()
+    const expiration = new Date(now.getTime() + 5 * 60 * 1000) // 5 minutos
+
+    // Usar uma transação para garantir atomicidade
+    return await runTransaction(db, async (transaction) => {
+      const lockDoc = await transaction.get(lockRef)
+
+      if (lockDoc.exists()) {
+        // Verifique se o bloqueio expirou
+        const data = lockDoc.data()
+        const lockExpiration = data.expiration.toDate()
+        if (now > lockExpiration) {
+          // Bloqueio expirado, podemos adquiri-lo
+          console.log(`[CRON_LOG][${executionId}] Lock expired, acquiring: ${lockId}`)
+          transaction.set(lockRef, {
+            acquired: true,
+            timestamp: Timestamp.now(),
+            expiration: Timestamp.fromDate(expiration),
+            executionId,
+          })
+          return true
+        }
+        console.log(`[CRON_LOG][${executionId}] Lock already exists and is valid: ${lockId}`)
+        return false // Bloqueio ainda válido
+      }
+
+      // Documento não existe, podemos criar
+      console.log(`[CRON_LOG][${executionId}] Creating new lock: ${lockId}`)
+      transaction.set(lockRef, {
+        acquired: true,
+        timestamp: Timestamp.now(),
+        expiration: Timestamp.fromDate(expiration),
+        executionId,
+      })
+      return true
+    })
+  } catch (error) {
+    console.error(`[CRON_LOG][${executionId}] Error acquiring lock:`, error)
+    return false
+  }
+}
+
 export async function GET(request: Request) {
-  console.log("==============================================")
-  console.log("[CRON_LOG] GET request received for check-birthdays")
+  // Generate a unique execution ID
+  const executionId = `exec_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
   const executionTime = new Date()
-  console.log(`[CRON_LOG] Execution time: ${executionTime.toISOString()}`)
+
+  console.log("==============================================")
+  console.log(`[CRON_LOG] Starting execution ${executionId} at ${executionTime.toISOString()}`)
+  console.log("[CRON_LOG] GET request received for check-birthdays")
 
   // Security Check
   const authHeader = request.headers.get("Authorization")
   const expectedSecretValue = process.env.CRON_SECRET
 
   if (!expectedSecretValue) {
-    console.error("[CRON_LOG] CRON_SECRET missing!")
+    console.error(`[CRON_LOG][${executionId}] CRON_SECRET missing!`)
     return NextResponse.json({ success: false, error: "Config missing" }, { status: 500 })
   }
 
@@ -238,12 +328,12 @@ export async function GET(request: Request) {
   const isValidAuth = authHeader === expectedAuth
 
   if (!isVercelCron && !isValidAuth) {
-    console.warn(`[CRON_LOG] Unauthorized access attempt. Header: ${authHeader}`)
+    console.warn(`[CRON_LOG][${executionId}] Unauthorized access attempt. Header: ${authHeader}`)
     return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 })
   }
 
   const authMethod = isVercelCron ? "Vercel Cron" : "Header Authorization"
-  console.log(`[CRON_LOG] Auth OK (${authMethod}). Starting check...`)
+  console.log(`[CRON_LOG][${executionId}] Auth OK (${authMethod}). Starting check...`)
 
   // Time Calculation
   const currentHour = executionTime.getUTCHours()
@@ -252,7 +342,7 @@ export async function GET(request: Request) {
   const currentMonth = executionTime.getUTCMonth() + 1
 
   console.log(
-    `[CRON_LOG] Current UTC Time: ${String(currentHour).padStart(2, "0")}:${String(currentMinute).padStart(2, "0")}. Date: ${currentDay}/${currentMonth}`,
+    `[CRON_LOG][${executionId}] Current UTC Time: ${String(currentHour).padStart(2, "0")}:${String(currentMinute).padStart(2, "0")}. Date: ${currentDay}/${currentMonth}`,
   )
 
   const results: Array<{ user: string; contact?: string; status: string; error?: string; messageId?: string }> = []
@@ -261,10 +351,10 @@ export async function GET(request: Request) {
   let usersProcessed = 0
 
   try {
-    console.log("[CRON_LOG] Fetching user settings...")
+    console.log(`[CRON_LOG][${executionId}] Fetching user settings...`)
     const userSettingsCollection = collection(db, "user_settings")
     const userSettingsSnapshot = await getDocs(userSettingsCollection)
-    console.log(`[CRON_LOG] Found ${userSettingsSnapshot.docs.length} user settings documents.`)
+    console.log(`[CRON_LOG][${executionId}] Found ${userSettingsSnapshot.docs.length} user settings documents.`)
 
     for (const userDoc of userSettingsSnapshot.docs) {
       usersProcessed++
@@ -274,7 +364,7 @@ export async function GET(request: Request) {
       const sessionName = userSettings?.sessionName || "default"
 
       console.log(
-        `\n[CRON_LOG] Processing User ${usersProcessed}: ${userEmail}. Configured time: ${configuredTime}, SessionName: ${sessionName}`,
+        `\n[CRON_LOG][${executionId}] Processing User ${usersProcessed}: ${userEmail}. Configured time: ${configuredTime}, SessionName: ${sessionName}`,
       )
 
       let configHour = 8
@@ -292,7 +382,7 @@ export async function GET(request: Request) {
         }
       } catch (e) {
         console.error(
-          `[CRON_LOG] Invalid time ('${configuredTime}') for ${userEmail}. Error:`,
+          `[CRON_LOG][${executionId}] Invalid time ('${configuredTime}') for ${userEmail}. Error:`,
           e instanceof Error ? e.message : e,
         )
         results.push({ user: userEmail, status: "error_config", error: `Invalid time: ${configuredTime}` })
@@ -302,24 +392,24 @@ export async function GET(request: Request) {
       // Exact Time Check
       const isTimeToSend = configHour === currentHour && configMinute === currentMinute
       console.log(
-        `[CRON_LOG] Time Check for ${userEmail}: (Config: ${configHour}:${configMinute} vs Current UTC: ${currentHour}:${currentMinute}) -> isTimeToSend: ${isTimeToSend}`,
+        `[CRON_LOG][${executionId}] Time Check for ${userEmail}: (Config: ${configHour}:${configMinute} vs Current UTC: ${currentHour}:${currentMinute}) -> isTimeToSend: ${isTimeToSend}`,
       )
 
       if (!isTimeToSend) {
         continue // Skip user if time doesn't match
       }
 
-      console.log(`[CRON_LOG] TIME MATCH for ${userEmail}! Fetching contacts...`)
+      console.log(`[CRON_LOG][${executionId}] TIME MATCH for ${userEmail}! Fetching contacts...`)
 
       try {
         const birthdayContacts = await getUserBirthdayContacts(userEmail, currentDay, currentMonth)
-        console.log(`[CRON_LOG] Found ${birthdayContacts.length} birthday contacts for ${userEmail}.`)
+        console.log(`[CRON_LOG][${executionId}] Found ${birthdayContacts.length} birthday contacts for ${userEmail}.`)
 
         if (birthdayContacts.length === 0) continue
 
-        console.log(`[CRON_LOG] Fetching messages for ${userEmail}...`)
+        console.log(`[CRON_LOG][${executionId}] Fetching messages for ${userEmail}...`)
         const birthdayMessages = await getBirthdayMessages(userEmail)
-        console.log(`[CRON_LOG] Found ${birthdayMessages.length} message templates for ${userEmail}.`)
+        console.log(`[CRON_LOG][${executionId}] Found ${birthdayMessages.length} message templates for ${userEmail}.`)
 
         if (birthdayMessages.length === 0) {
           results.push({ user: userEmail, status: "error_config", error: "No birthday messages configured" })
@@ -330,15 +420,16 @@ export async function GET(request: Request) {
         for (const contact of birthdayContacts) {
           totalMessagesAttempted++
 
-          // CRITICAL FIX: Check if ANY message was already sent to this contact today
-          const alreadySent = await wasMessageSentToContactToday(userEmail, contact.id)
-
-          if (alreadySent) {
-            console.log(`[CRON] ⏭️ Message for ${contact.nome} (${userEmail}) already sent today. Skipping.`)
+          // NEW CODE: Try to acquire a lock before sending
+          const lockAcquired = await acquireLock(userEmail, contact.id, executionId)
+          if (!lockAcquired) {
+            console.log(
+              `[CRON_LOG][${executionId}] 🔒 Could not acquire lock for ${contact.nome} (${userEmail}). Likely being processed by another instance.`,
+            )
             results.push({
               user: userEmail,
               contact: contact.nome,
-              status: "skipped_duplicate",
+              status: "skipped_locked",
             })
             continue // Skip to next contact
           }
@@ -347,7 +438,31 @@ export async function GET(request: Request) {
           const randomIndex = Math.floor(Math.random() * birthdayMessages.length)
           const messageTemplate = birthdayMessages[randomIndex]
 
-          // Call the sendMessage function
+          // Personalize message
+          const personalizedMessage = personalizeMessage(messageTemplate, contact.nome, true)
+
+          // UPDATED: Use transaction to check and record message
+          const transactionResult = await checkAndRecordMessage(
+            userEmail,
+            contact.id,
+            contact.nome,
+            contact.telefone,
+            personalizedMessage,
+          )
+
+          if (!transactionResult.success) {
+            console.log(
+              `[CRON_LOG][${executionId}] ⏭️ Message for ${contact.nome} (${userEmail}) already recorded or error in transaction. Skipping.`,
+            )
+            results.push({
+              user: userEmail,
+              contact: contact.nome,
+              status: "skipped_transaction",
+            })
+            continue // Skip to next contact
+          }
+
+          // Call the sendMessage function only if transaction was successful
           const sendResult = await sendMessage({
             phoneNumber: contact.telefone,
             message: messageTemplate,
@@ -355,17 +470,19 @@ export async function GET(request: Request) {
             contactId: contact.id,
             contactName: contact.nome,
             userEmail: userEmail,
+            messageId: transactionResult.messageId!,
+            executionId: executionId,
           })
 
           if (sendResult.success) {
             totalMessagesSent++
-            console.log(`[CRON] ✅ Message sent to ${contact.nome} (${userEmail}).`)
+            console.log(`[CRON_LOG][${executionId}] ✅ Message sent to ${contact.nome} (${userEmail}).`)
 
             results.push({
               user: userEmail,
               contact: contact.nome,
               status: "success",
-              messageId: sendResult.messageId,
+              messageId: transactionResult.messageId,
             })
           } else {
             results.push({
@@ -375,11 +492,13 @@ export async function GET(request: Request) {
               error: sendResult.message,
             })
 
-            console.error(`[CRON] ❌ Failed to send to ${contact.nome} (${userEmail}): ${sendResult.message}.`)
+            console.error(
+              `[CRON_LOG][${executionId}] ❌ Failed to send to ${contact.nome} (${userEmail}): ${sendResult.message}.`,
+            )
           }
         } // End contact loop
       } catch (userError) {
-        console.error(`[CRON_LOG] Error processing user ${userEmail} after time match:`, userError)
+        console.error(`[CRON_LOG][${executionId}] Error processing user ${userEmail} after time match:`, userError)
         results.push({
           user: userEmail,
           status: "error_user_processing",
@@ -389,12 +508,14 @@ export async function GET(request: Request) {
     } // End user loop
 
     console.log(
-      `[CRON_LOG] Check finished. Processed: ${usersProcessed}. Attempted: ${totalMessagesAttempted}. Sent New: ${totalMessagesSent}.`,
+      `[CRON_LOG][${executionId}] Check finished. Processed: ${usersProcessed}. Attempted: ${totalMessagesAttempted}. Sent New: ${totalMessagesSent}.`,
     )
+    console.log(`[CRON_LOG] Completed execution ${executionId}`)
     console.log("==============================================")
 
     return NextResponse.json({
       success: true,
+      executionId: executionId,
       timestamp: executionTime.toISOString(),
       checkedUsers: usersProcessed,
       messagesAttempted: totalMessagesAttempted,
@@ -402,12 +523,14 @@ export async function GET(request: Request) {
       details: results,
     })
   } catch (error) {
-    console.error("[CRON_LOG] GENERAL CRON ERROR:", error)
+    console.error(`[CRON_LOG][${executionId}] GENERAL CRON ERROR:`, error)
+    console.log(`[CRON_LOG] Completed execution ${executionId} with errors`)
     console.log("==============================================")
 
     return NextResponse.json(
       {
         success: false,
+        executionId: executionId,
         error: error instanceof Error ? error.message : String(error),
         timestamp: executionTime.toISOString(),
       },
