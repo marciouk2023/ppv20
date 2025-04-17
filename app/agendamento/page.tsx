@@ -210,7 +210,7 @@ export default function AgendamentoPage() {
       console.error("Erro ao carregar contatos do Firebase:", error)
       toast({
         title: "Erro ao carregar contatos",
-        description: "Não foi possível carregar os contatos do Firebase. Verifique sua conex��o.",
+        description: "Não foi possível carregar os contatos do Firebase. Verifique sua conexão.",
         variant: "destructive",
       })
     } finally {
@@ -404,7 +404,7 @@ export default function AgendamentoPage() {
       {/* Main content */}
       <div className="flex-1 p-6 ml-[196px]">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-2xl font-semibold text-[#1e3a29] mb-2">Agendamento de Mensagens</h1>
+          <h1 className="text-2xl font-semibold text-[#1e3a29] mb-2">TESTE V0 - Agendamento</h1>
           <p className="text-gray-600 mb-6">
             Agende mensagens para serem enviadas automaticamente em datas específicas.
           </p>
@@ -427,7 +427,7 @@ export default function AgendamentoPage() {
               <div className="grid grid-cols-10 gap-4">
                 {/* Contact selection card - 40% de largura */}
                 <div className="col-span-10 lg:col-span-4">
-                  <Card>
+                  <Card className="border-4 border-orange-500">
                     <CardHeader>
                       <CardTitle className="text-lg font-medium flex items-center">
                         <Users className="h-5 w-5 mr-2 text-blue-500" />
@@ -575,10 +575,10 @@ export default function AgendamentoPage() {
                             const contact = contacts.find((c) => c.id === selectedContact)
                             return contact ? (
                               <div className="flex items-center gap-3">
-                                <div className="h-10 w-10 rounded-full overflow-hidden flex-shrink-0 bg-orange-200 flex items-center justify-center">
+                                <div className="h-10 w-10 rounded-full overflow-hidden flex-shrink-0">
                                   {contact.imagem ? (
                                     <img
-                                      src={contact.imagem}
+                                      src={contact.imagem || "/placeholder.svg"}
                                       alt={contact.nome}
                                       className="h-full w-full object-cover"
                                     />

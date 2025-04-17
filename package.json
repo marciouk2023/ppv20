@@ -58,9 +58,9 @@
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.6",
     "zod": "^3.24.1",
-    "https": "latest",
     "firebase": "latest",
     "uuid": "latest",
+    "https": "latest",
     "axios": "latest"
   },
   "devDependencies": {
