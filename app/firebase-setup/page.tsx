@@ -357,22 +357,22 @@ export default function FirebaseSetupPage() {
             <pre className="bg-white p-3 rounded border border-blue-100 text-sm overflow-x-auto">
               {`
 batista-agape-ronaldo/
-└── dados/
-    ├── nome: "Igreja Batista Ágape"
-    ├── criadoEm: timestamp
-    ├── descricao: "Dados da Igreja Batista Ágape gerenciados por Ronaldo"
-    └── usuarios/
-        ├── [id-usuario-1]/
-        │   ├── nome: "Nome do Usuário"
-        │   ├── email: "email@exemplo.com"
-        │   ├── telefone: "+5500000000000"
-        │   ├── grupo: "Igreja"
-        │   ├── dataNascimento: "YYYY-MM-DD"
-        │   └── criadoEm: timestamp
-        ├── [id-usuario-2]/
-        │   └── ...
-        └── ...
-            `}
+  └── dados/
+      ├── nome: "Igreja Batista Ágape"
+      ├── criadoEm: timestamp
+      ├── descricao: "Dados da Igreja Batista Ágape gerenciados por Ronaldo"
+      └── usuarios/
+          ├── [id-usuario-1]/
+          │   ├── nome: "Nome do Usuário"
+          │   ├── email: "email@exemplo.com"
+          │   ├── telefone: "+5500000000000"
+          │   ├── grupo: "Igreja"
+          │   ├── dataNascimento: "YYYY-MM-DD"
+          │   └── criadoEm: timestamp
+          ├── [id-usuario-2]/
+          │   └── ...
+          └── ...
+              `}
             </pre>
           </div>
         </div>

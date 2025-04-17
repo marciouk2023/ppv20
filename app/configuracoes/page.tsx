@@ -24,9 +24,6 @@ type ConnectionStatus = "disconnected" | "connecting" | "connected" | "error"
 // Global variable to store the status check interval
 let statusCheckInterval: NodeJS.Timeout | null = null
 
-// !!! ATENÇÃO: Chave da API - Mover para variável de ambiente em produção !!!
-const WAHA_API_KEY = 'Cara2211Msa2013+ou-6';
-
 // Connection Status Badge Component
 function ConnectionStatusBadge({
   status,
@@ -55,16 +52,11 @@ function ConnectionStatusBadge({
             // Use VERCEL_URL if available, otherwise fallback
             const apiUrl = "/api" // Sempre use a API local, que fará o proxy corretamente
 
-            // <<< MODIFICAÇÃO AQUI: Corrigido o path e adicionado o header >>>
-            const sessionEndpoint = `${apiUrl}/api/sessions/${userSession.sessionName}` // REMOVIDO /status
+            const sessionEndpoint = `${apiUrl}/api/whatsapp/sessions/${userSession.sessionName}/status`
             console.log(`[StatusBadge] Checking endpoint: ${sessionEndpoint}`) // Debug URL
             const response = await fetch(sessionEndpoint, {
               cache: "no-store", // Ensure fresh data
-              headers: { // ADICIONADO header
-                'X-API-KEY': WAHA_API_KEY
-              }
             })
-            // <<< FIM DA MODIFICAÇÃO >>>
 
             if (response.ok) {
               const data = await response.json()
@@ -75,8 +67,7 @@ function ConnectionStatusBadge({
               if (
                 currentState === "WORKING" ||
                 currentState === "CONNECTED" ||
-                currentState === "AUTHENTICATED" || // Adicionado estado AUTHENTICATED como conectado
-                data.connected === true || // Verificações redundantes podem ser úteis
+                data.connected === true ||
                 data.authenticated === true
               ) {
                 if (status !== "connected") setConnectionStatus("connected") // Only update if changed
@@ -85,32 +76,26 @@ function ConnectionStatusBadge({
                 if (status === "disconnected") {
                   setConnectionStatus("connecting")
                 }
-                // Se já estiver 'connecting', não mudar para 'connecting' de novo
               } else {
-                // Qualquer outro estado (OPENING, DISCONNECTED, etc.) considera desconectado
                 if (status === "connected") {
                   setConnectionStatus("disconnected")
                 }
               }
-              return // Sai da função após sucesso
+              return
             } else {
-              // Resposta não OK (ex: 401, 404, 500)
               console.warn(
                 `[StatusBadge] Non-OK response (${response.status}) checking session ${userSession.sessionName}`,
               )
               if (status === "connected") setConnectionStatus("disconnected")
             }
           } catch (error) {
-            // Erro na chamada fetch (rede, etc)
             console.warn(`[StatusBadge] Error fetching session status for ${userSession.sessionName}:`, error)
             if (status === "connected") setConnectionStatus("disconnected")
           }
         } else {
-          // Firestore diz que não tem sessão
           if (status === "connected") setConnectionStatus("disconnected")
         }
       } catch (error) {
-        // Erro ao checar checkUserSession
         console.warn("[StatusBadge] Error checking WAHA status (outer try):", error)
         if (status === "connected") setConnectionStatus("disconnected")
       }
@@ -169,13 +154,13 @@ export default function ConfiguracoesPage() {
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const { toast } = useToast()
   const { user } = useAuth()
-  const [wahaStatus, setWahaStatus] = useState<string | null>(null) // Estado interno para status da WAHA
+  const [wahaStatus, setWahaStatus] = useState<string | null>(null)
 
   // State to store user session info fetched from Firestore/API
   const [userSessionInfo, setUserSessionInfo] = useState<{
     hasSession: boolean
     sessionName: string | null
-    status: string | null // Status from Firestore
+    status: string | null
   }>({
     hasSession: false,
     sessionName: null,
@@ -212,7 +197,7 @@ export default function ConfiguracoesPage() {
           // console.log(`Horário carregado do Firestore: ${savedTime}`)
         } else {
           // console.log("Nenhum horário salvo encontrado, usando padrão 08:00.")
-          setHorarioSelecionado("08:00") // Define padrão se não houver salvo
+          setHorarioSelecionado("08:00")
         }
       } catch (error) {
         console.error("Erro ao carregar horário do Firestore:", error)
@@ -221,123 +206,98 @@ export default function ConfiguracoesPage() {
     loadSavedTime()
   }, [user])
 
-  // Check and update connection status (Function used for periodic checks)
+  // Check and update connection status
   const checkAndUpdateSessionStatus = async () => {
     if (!user?.email) {
-      // If user logs out, ensure disconnected status
-      if (connectionStatus !== "disconnected") {
-        setConnectionStatus("disconnected")
-      }
+      setConnectionStatus("disconnected")
       setUserSessionInfo({ hasSession: false, sessionName: null, status: null })
-      setSessionName(null) // Clear session name as well
       return
     }
 
     try {
-      // 1. Check Firestore first
       const sessionInfo = await checkUserSession(user.email)
-      setUserSessionInfo(sessionInfo) // Update state with Firestore info
+      setUserSessionInfo(sessionInfo)
 
       if (sessionInfo.hasSession && sessionInfo.sessionName) {
         setSessionName(sessionInfo.sessionName) // Keep track of the session name
-
-        // 2. If Firestore indicates a potentially active session, check WAHA API
-        // Only check API if status is potentially active or unknown
-        // Avoid API check if Firestore clearly says 'disconnected' or 'error'
+        // Check actual status via API only if Firestore status looks active or unknown
         if (
           sessionInfo.status === "WORKING" ||
           sessionInfo.status === "CONNECTED" ||
           sessionInfo.status === "AUTHENTICATED" ||
-          sessionInfo.status === "STARTING" ||
-          sessionInfo.status === "SCAN_QR_CODE" ||
-          sessionInfo.status === "PAIRING" ||
-          !sessionInfo.status // Also check if status is unknown/null in Firestore
+          !sessionInfo.status
         ) {
           try {
-            const apiUrl = "/api" // Use local proxy
-
-            // <<< MODIFICAÇÃO AQUI: Corrigido o path e adicionado o header >>>
-            const statusEndpoint = `${apiUrl}/api/sessions/${sessionInfo.sessionName}` // REMOVIDO /status
-            console.log(`[SessionCheck] Checking API endpoint: ${statusEndpoint}`)
-            const response = await fetch(statusEndpoint, {
-                cache: "no-store",
-                headers: { // ADICIONADO header
-                    'X-API-KEY': WAHA_API_KEY
-                }
-             })
-            // <<< FIM DA MODIFICAÇÃO >>>
+            const apiUrl = "/api" // Sempre use a API local, que fará o proxy corretamente
+            const statusEndpoint = `${apiUrl}/api/whatsapp/sessions/${sessionInfo.sessionName}/status`
+            console.log(`[StatusBadge] Checking endpoint: ${statusEndpoint}`) // Debug URL
+            const response = await fetch(statusEndpoint, { cache: "no-store" })
 
             if (response.ok) {
               const data = await response.json()
-              const currentState = data.state || data.status // Get WAHA status
-              setWahaStatus(currentState) // Update WAHA status state
+              const currentState = data.state || data.status
+              setWahaStatus(currentState)
 
-              // Update main connectionStatus based on WAHA API response
               if (
                 currentState === "WORKING" ||
                 currentState === "CONNECTED" ||
-                currentState === "AUTHENTICATED" ||
                 data.connected === true ||
                 data.authenticated === true
               ) {
                 if (connectionStatus !== "connected") setConnectionStatus("connected")
+                // setLastConnection(new Date().toLocaleString()) // Maybe update less frequently
               } else if (currentState === "SCAN_QR_CODE" || currentState === "STARTING" || currentState === "PAIRING") {
-                if (connectionStatus === "disconnected") setConnectionStatus("connecting")
-                // Se já está 'connecting', não faz nada
+                if (status === "disconnected") {
+                  setConnectionStatus("connecting")
+                }
               } else {
-                // Assume disconnected for other states (OPENING, DISCONNECTED, etc.)
-                if (connectionStatus === "connected") setConnectionStatus("disconnected")
+                if (status === "connected") {
+                  setConnectionStatus("disconnected")
+                }
               }
+              return
             } else {
-              // API returned non-OK status
               console.warn(
-                `[SessionCheck] Non-OK response (${response.status}) from API for ${sessionInfo.sessionName}`,
+                `[StatusBadge] Non-OK response (${response.status}) checking session ${sessionInfo.sessionName}`,
               )
-              // If we thought we were connected, but API check fails, set to disconnected
-              if (connectionStatus === "connected") setConnectionStatus("disconnected")
+              if (status === "connected") setConnectionStatus("disconnected")
             }
           } catch (apiError) {
-            // Error fetching from API
-            console.error(`[SessionCheck] Error fetching API status for ${sessionInfo.sessionName}:`, apiError)
-            if (connectionStatus === "connected") setConnectionStatus("disconnected")
+            console.error(`[StatusBadge] Error fetching session status for ${sessionInfo.sessionName}:`, apiError)
+            if (status === "connected") setConnectionStatus("disconnected")
           }
         } else {
-          // Firestore status is explicitly not active (e.g., 'disconnected', 'error')
-          // Ensure frontend reflects this disconnected state
+          // Firestore status is explicitly not connected (e.g., 'disconnected', 'error')
           if (connectionStatus !== "disconnected") {
             setConnectionStatus("disconnected")
           }
         }
       } else {
-        // Firestore says no session exists for the user
+        // Firestore says no session
         if (connectionStatus !== "disconnected") {
           setConnectionStatus("disconnected")
         }
         setSessionName(null) // Clear session name if no session exists
       }
     } catch (error) {
-      // Error during checkUserSession (Firestore read error)
-      console.error("[SessionCheck] Error checking user session (Firestore):", error)
+      console.error("[SessionCheck] Error checking user session:", error)
       if (connectionStatus !== "disconnected") {
         setConnectionStatus("disconnected")
       }
-      // Reset states on error
       setUserSessionInfo({ hasSession: false, sessionName: null, status: null })
-      setSessionName(null)
     }
   }
-
 
   // Run session check periodically and on user change
   useEffect(() => {
     if (!user?.email) {
       setConnectionStatus("disconnected") // Force disconnect if user logs out
-      return // Stop if no user
+      return
     }
-    checkAndUpdateSessionStatus() // Initial check when user loads or changes
+    checkAndUpdateSessionStatus() // Initial check
     const intervalId = setInterval(checkAndUpdateSessionStatus, 20000) // Check every 20 seconds
-    return () => clearInterval(intervalId) // Cleanup interval on unmount or user change
-  }, [user]) // Re-run when user object changes
+    return () => clearInterval(intervalId) // Cleanup interval
+  }, [user]) // Re-run when user changes
 
   // Cleanup status check interval when component unmounts
   useEffect(() => {
@@ -350,14 +310,12 @@ export default function ConfiguracoesPage() {
     }
   }, []) // Run only once on mount for cleanup registration
 
-
-  // Helper function to generate a unique session name (REMOVED prefix 'session_')
+  // Helper function to generate a unique session name
   function generateLocalUniqueSessionName(): string {
     const timestamp = Date.now()
     const random = Math.floor(Math.random() * 10000)
-    return `${timestamp}_${random}` // Sem prefixo
+    return `${timestamp}_${random}` // Removido o prefixo "session_"
   }
-
 
   // Generate QR Code
   const generateQRCode = async () => {
@@ -366,12 +324,20 @@ export default function ConfiguracoesPage() {
       return
     }
 
-    // Gere um nome de sessão localmente (sem prefixo)
-    // Usamos um nome novo toda vez para garantir que um QR novo seja gerado
-    const tempSessionName = generateLocalUniqueSessionName();
-    console.log(`[Frontend] generateQRCode - Using new session name: ${tempSessionName}`)
+    // Gere um nome de sessão sem o prefixo "session_"
+    let tempSessionName = sessionName // Use existing if available, else generate
+    if (!tempSessionName) {
+      const timestamp = Date.now()
+      const random = Math.floor(Math.random() * 10000)
+      tempSessionName = `${timestamp}_${random}` // Removido o prefixo "session_"
+    } else if (tempSessionName.startsWith("session_")) {
+      // Se já tiver o prefixo, remova-o
+      tempSessionName = tempSessionName.substring(8)
+    }
 
-    // Stop any existing status check interval related to a previous QR attempt
+    console.log(`[Frontend] generateQRCode - Session name: ${tempSessionName}`)
+
+    // Stop any existing status check
     if (statusCheckInterval) {
       clearInterval(statusCheckInterval)
       statusCheckInterval = null
@@ -379,29 +345,23 @@ export default function ConfiguracoesPage() {
 
     setIsGeneratingQR(true)
     setErrorMessage(null)
-    setConnectionStatus("connecting") // Show connecting state immediately
-    setQrCode(null) // Clear previous QR code
-    setSessionName(tempSessionName) // Set the session name we are trying to initiate
+    setConnectionStatus("connecting")
+    setQrCode(null)
+    setSessionName(tempSessionName) // Set the name we'll use
 
     try {
-      const apiUrl = "/api" // Use local proxy
+      const apiUrl = "/api" // Sempre use a API local, que fará o proxy corretamente
 
-      // Call backend API to start session and get QR
-      // <<< MODIFICAÇÃO AQUI: NÃO adicionamos X-API-KEY aqui intencionalmente >>>
-      // Assumimos que a rota /api/whatsapp/generate-qr no backend é responsável
-      // por se autenticar com a WAHA API se necessário. O frontend só envia
-      // os dados para iniciar o processo.
+      // Call API to start session (might return QR directly or require polling)
       const startSessionResponse = await fetch(`${apiUrl}/api/whatsapp/generate-qr`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          sessionName: tempSessionName, // Envia nome sem prefixo
+          sessionName: tempSessionName, // Sem o prefixo "session_"
           userEmail: user.email,
         }),
-        cache: "no-store", // Evita cache
+        cache: "no-store",
       })
-      // <<< FIM DA MODIFICAÇÃO >>>
-
 
       const startSessionData = await startSessionResponse.json()
 
@@ -410,29 +370,29 @@ export default function ConfiguracoesPage() {
         throw new Error(startSessionData.message || `Falha ao gerar QR Code: Status ${startSessionResponse.status}`)
       }
 
-      // Successfully initiated on the backend, save association in Firestore
-      await saveUserSession(user.email, tempSessionName) // Salva nome sem prefixo
+      // Successfully initiated, save association
+      await saveUserSession(user.email, tempSessionName)
 
-      // Check response for QR code or already connected status
+      // Check response for QR code or connected status
       if (startSessionData.qrCode) {
         // console.log("[Frontend] QR Code received directly. Displaying.");
         setQrCode(startSessionData.qrCode)
-        setConnectionStatus("connecting") // Keep connecting state while QR is displayed
-        startStatusChecking(tempSessionName) // Start polling for connection confirmation
+        setConnectionStatus("connecting")
+        startStatusChecking(tempSessionName) // Start polling
       } else if (
         startSessionData.status === "CONNECTED" ||
         startSessionData.status === "WORKING" ||
         startSessionData.status === "AUTHENTICATED"
       ) {
         // console.log("[Frontend] API reported session already connected during QR request.");
-        setConnectionStatus("connected") // Go directly to connected state
-        setQrCode(null) // Ensure no QR code is shown
+        setConnectionStatus("connected")
+        setQrCode(null)
         setLastConnection(new Date().toLocaleString())
-        await updateSessionStatus(user.email, "CONNECTED") // Update Firestore status
+        await updateSessionStatus(user.email, "CONNECTED")
       } else {
-        // Fallback: Start polling if QR wasn't returned and not already connected
+        // Might need polling if QR wasn't returned directly
         console.warn(
-          "[Frontend] QR not returned and not connected, starting polling based on session status:",
+          "[Frontend] QR not returned directly, starting polling based on session status:",
           startSessionData.status,
         )
         setConnectionStatus("connecting") // Assume connecting and poll
@@ -444,20 +404,17 @@ export default function ConfiguracoesPage() {
       setErrorMessage(error instanceof Error ? error.message : "Erro desconhecido ao gerar QR Code.")
       setQrCode(null)
       // Do not clear sessionName here, might be needed for retry if session exists
-      // Ensure interval is cleared on error
       if (statusCheckInterval) {
         clearInterval(statusCheckInterval)
         statusCheckInterval = null
       }
     } finally {
-      setIsGeneratingQR(false) // Stop loading indicator for the button
+      setIsGeneratingQR(false)
     }
   }
 
-
   // Start Periodic Status Checking After QR Display
   const startStatusChecking = (sessionNameToCheck: string) => {
-    // Clear any previous interval first
     if (statusCheckInterval) {
       clearInterval(statusCheckInterval)
       statusCheckInterval = null
@@ -465,50 +422,42 @@ export default function ConfiguracoesPage() {
 
     // console.log(`[StatusCheck] Starting for ${sessionNameToCheck} (Interval: 5s, Timeout: 2min)`)
     let attemptCount = 0
-    const maxAttempts = 24 // 2 minutes timeout (24 * 5 seconds)
+    const maxAttempts = 24 // 2 minutes timeout
 
     statusCheckInterval = setInterval(async () => {
-      // Stop conditions
       if (
-        attemptCount >= maxAttempts || // Timeout reached
-        connectionStatus === "connected" || // Already connected
-        connectionStatus === "error" || // An error occurred
-        sessionName !== sessionNameToCheck // User initiated a new QR generation
+        attemptCount >= maxAttempts ||
+        connectionStatus === "connected" ||
+        connectionStatus === "error" ||
+        sessionName !== sessionNameToCheck
       ) {
         if (statusCheckInterval) {
           clearInterval(statusCheckInterval)
           statusCheckInterval = null
           // console.log(`[StatusCheck] Stopped for ${sessionNameToCheck}. Reason: Attempts=${attemptCount}, Status=${connectionStatus}, SessionChanged=${sessionName !== sessionNameToCheck}.`)
-          // Handle timeout specifically
           if (attemptCount >= maxAttempts && connectionStatus === "connecting" && sessionName === sessionNameToCheck) {
             setConnectionStatus("error")
-            setQrCode(null) // Clear QR code on timeout
+            setQrCode(null)
             setErrorMessage("Tempo expirado para escanear o QR Code. Gere um novo.")
             // Consider logging out the session on the backend if possible on timeout
           }
         }
-        return // Exit the interval function
+        return
       }
 
       attemptCount++
 
       try {
-        const apiUrl = "/api" // Use local proxy
+        const apiUrl = "/api" // Sempre use a API local, que fará o proxy corretamente
 
-        // Ensure we use the correct session name for checking (without prefix if needed)
-        const wahaSessionName = sessionNameToCheck // Já estamos usando sem prefixo
+        // Remove o prefixo 'session_' se existir
+        const wahaSessionName = sessionNameToCheck.startsWith("session_")
+          ? sessionNameToCheck.substring(8)
+          : sessionNameToCheck
 
-        // <<< MODIFICAÇÃO AQUI: Corrigido o path e adicionado o header >>>
-        const statusEndpoint = `${apiUrl}/api/sessions/${wahaSessionName}` // REMOVIDO /status
+        const statusEndpoint = `${apiUrl}/api/whatsapp/sessions/${wahaSessionName}/status`
         console.log(`[StatusCheck] Checking endpoint: ${statusEndpoint}`)
-        const statusResponse = await fetch(statusEndpoint, {
-            cache: "no-store",
-            headers: { // ADICIONADO header
-                'X-API-KEY': WAHA_API_KEY
-            }
-        })
-        // <<< FIM DA MODIFICAÇÃO >>>
-
+        const statusResponse = await fetch(statusEndpoint, { cache: "no-store" })
 
         // Handle non-JSON responses gracefully
         const contentType = statusResponse.headers.get("content-type")
@@ -516,60 +465,48 @@ export default function ConfiguracoesPage() {
           const responseText = await statusResponse.text()
           // console.warn(`[StatusCheck] Non-JSON response (${statusResponse.status}). Body: ${responseText.substring(0,100)}`);
           if (statusResponse.status === 404) {
-             // If API says session not found during polling, it's an error state
-            setErrorMessage(`Sessão ${sessionNameToCheck} não encontrada na API. Gere um novo QR code.`)
+            setErrorMessage(`Sessão ${sessionNameToCheck} não encontrada. Gere um novo QR code.`)
             setConnectionStatus("error")
             setQrCode(null)
             if (statusCheckInterval) clearInterval(statusCheckInterval)
             statusCheckInterval = null
           }
-          // If not 404, maybe just transient issue, continue polling? Or treat as error?
-          // For now, just log and let it continue polling unless 404.
           return // Skip processing this interval
         }
 
-        // Process JSON response
         const statusResult = await statusResponse.json()
         // console.log(`[StatusCheck] <- Response ${statusResponse.status}:`, statusResult);
 
         if (!statusResponse.ok) {
-          // Handle non-OK JSON responses (e.g., 401 Unauthorized, 422)
-          // console.warn(`[StatusCheck] Non-OK status (${statusResponse.status}) from API:`, statusResult.message || statusResult);
-          // Potentially set error state here if needed based on status code
-          return // Continue polling unless it's a fatal error
+          // console.warn(`[StatusCheck] Non-OK status (${statusResponse.status}) from API.`);
+          return // Continue polling unless it's 404 (handled above)
         }
 
-        // Check WAHA status from the successful response
         const currentState = statusResult.state || statusResult.status
         if (
           currentState === "CONNECTED" ||
           currentState === "WORKING" ||
           currentState === "AUTHENTICATED" ||
-          statusResult.connected === true || // Redundant checks
+          statusResult.connected === true ||
           statusResult.authenticated === true
         ) {
           // console.log("[StatusCheck] CONNECTED!")
-          setConnectionStatus("connected") // Set final connected state
-          setQrCode(null) // Clear QR code
-          setLastConnection(new Date().toLocaleString()) // Record connection time
+          setConnectionStatus("connected")
+          setQrCode(null)
+          setLastConnection(new Date().toLocaleString())
           if (user?.email) {
-            await updateSessionStatus(user.email, "CONNECTED") // Update Firestore
+            await updateSessionStatus(user.email, "CONNECTED")
           }
           if (statusCheckInterval) clearInterval(statusCheckInterval) // Stop polling immediately
           statusCheckInterval = null
         } else {
-          // Still waiting (e.g., SCAN_QR_CODE, STARTING) - continue polling
           // console.log(`[StatusCheck] Current status: ${currentState || "Unknown"}`)
         }
       } catch (error) {
-        // Network error during fetch
         console.error(`[StatusCheck] Network/Fetch error checking status for ${sessionNameToCheck}:`, error)
-        // Perhaps implement retry logic or stop after several network errors?
-        // For now, let it continue polling.
       }
     }, 5000) // Check every 5 seconds
   }
-
 
   // --- Render Component ---
   return (
@@ -590,11 +527,10 @@ export default function ConfiguracoesPage() {
                     <CardDescription>Conecte sua conta para enviar mensagens automáticas</CardDescription>
                   </div>
                   <div className="flex-shrink-0 mt-2 sm:mt-0">
-                    {/* ConnectionStatusBadge now relies on the main component's periodic check */}
                     <ConnectionStatusBadge
                       status={connectionStatus}
-                      setConnectionStatus={setConnectionStatus} // Pass setter if needed by badge internally (seems not needed now)
-                      setLastConnection={setLastConnection}   // Pass setter if needed by badge internally (seems not needed now)
+                      setConnectionStatus={setConnectionStatus}
+                      setLastConnection={setLastConnection}
                     />
                   </div>
                 </div>
@@ -626,16 +562,13 @@ export default function ConfiguracoesPage() {
                         </p>
                         {user?.email && <p className="text-xs text-blue-600 break-words">Associada a: {user.email}</p>}
                         {/* Removed session name display from here as it's shown above */}
-                         {wahaStatus && ( // Display WAHA status if available
-                            <p className="text-xs text-blue-600 mt-1">Status WAHA: <span className="font-semibold">{wahaStatus}</span></p>
-                         )}
                       </div>
                       <Alert variant="default" className="mt-4 max-w-md bg-yellow-50 border-yellow-100">
                         <AlertTriangle className="h-4 w-4 text-yellow-600" />
                         <AlertTitle className="text-yellow-800 text-sm">Desconexão</AlertTitle>
                         <AlertDescription className="text-yellow-700 text-xs">
                           Para usar outra conta ou reconectar, primeiro desconecte este aparelho em: WhatsApp &gt;
-                          Configurações &gt; Aparelhos Conectados. A seguir, clique em "Gerar Novo QR Code".
+                          Configurações &gt; Aparelhos Conectados. A seguir, clique em "Gerar QR Code".
                         </AlertDescription>
                       </Alert>
                       {/* Re-enable QR generation button */}
@@ -662,7 +595,7 @@ export default function ConfiguracoesPage() {
                         <>
                           <div className="mb-4 p-1 border bg-white shadow-md">
                             <img
-                              src={qrCode || "/placeholder.svg"} // Use placeholder if qrCode is null somehow
+                              src={qrCode || "/placeholder.svg"}
                               alt="QR Code WhatsApp"
                               className="w-56 h-56 sm:w-64 sm:h-64 object-contain"
                             />
@@ -686,14 +619,13 @@ export default function ConfiguracoesPage() {
                             size="sm"
                             className="mt-2 text-red-600 border-red-300 hover:bg-red-50"
                             onClick={() => {
-                              setConnectionStatus("disconnected") // Go back to disconnected
-                              setQrCode(null) // Clear QR
-                              setErrorMessage(null) // Clear error
+                              setConnectionStatus("disconnected")
+                              setQrCode(null)
+                              setErrorMessage(null)
                               // Do not clear sessionName, might be needed for backend cleanup if applicable
-                              if (statusCheckInterval) clearInterval(statusCheckInterval) // Stop polling
+                              if (statusCheckInterval) clearInterval(statusCheckInterval)
                               statusCheckInterval = null
                               console.log("QR Scan Cancelled by user.")
-                              // Optionally call a backend endpoint to stop/logout the session if needed
                             }}
                           >
                             Cancelar
@@ -826,8 +758,7 @@ export default function ConfiguracoesPage() {
                         <p className="text-xs text-gray-500 mt-2 text-center sm:text-left pl-1">
                           Horário de Brasília (GMT-3)
                         </p>
-                         {/* Countdown Timer Component (Display Only) */}
-                         <CountdownTimer targetTime={horarioSelecionado} />
+                        {/* Removed CountdownTimer component call */}
                       </div>
                     </div>
                     {/* Message Personalization Setting */}
@@ -913,7 +844,6 @@ export default function ConfiguracoesPage() {
   )
 }
 
-
 // --- Countdown Timer Component (Display Only - Logic Removed) ---
 function CountdownTimer({ targetTime }: { targetTime: string }) {
   const [timeRemaining, setTimeRemaining] = useState<string>("Calculando...")
@@ -929,19 +859,18 @@ function CountdownTimer({ targetTime }: { targetTime: string }) {
           throw new Error("Invalid target time format")
         }
 
-        // Calculate target time based on current date and target HH:MM
-        const targetDate = new Date(now) // Use current date
+        const targetDate = new Date()
+        // Compare with local time for display purposes, assuming targetTime is local
         targetDate.setHours(targetHours, targetMinutes, 0, 0)
 
-        // If target time has already passed today, set target for tomorrow
         if (targetDate <= now) {
           targetDate.setDate(targetDate.getDate() + 1)
         }
 
-        // Calculate difference in seconds
         const diffInSeconds = differenceInSeconds(targetDate, now)
 
-        if (diffInSeconds >= 0 && diffInSeconds <= 86400) { // Only display if within the next 24 hours
+        if (diffInSeconds >= 0 && diffInSeconds <= 86400) {
+          // Within 24 hours
           const hours = Math.floor(diffInSeconds / 3600)
           const minutes = Math.floor((diffInSeconds % 3600) / 60)
           const seconds = diffInSeconds % 60
@@ -950,7 +879,6 @@ function CountdownTimer({ targetTime }: { targetTime: string }) {
           )
           setIsNear(true)
         } else {
-          // If more than 24 hours away, don't show countdown
           setTimeRemaining("...")
           setIsNear(false)
         }
@@ -961,12 +889,12 @@ function CountdownTimer({ targetTime }: { targetTime: string }) {
       }
     }
 
-    calculateTime() // Initial calculation
-    const interval = setInterval(calculateTime, 1000) // Update every second
-    return () => clearInterval(interval) // Cleanup on unmount or targetTime change
+    calculateTime()
+    const interval = setInterval(calculateTime, 1000)
+    return () => clearInterval(interval)
   }, [targetTime]) // Recalculate if targetTime changes
 
-  if (!isNear) return null // Don't render if target is far away
+  if (!isNear) return null
 
   return (
     <div className="mt-4 text-center">

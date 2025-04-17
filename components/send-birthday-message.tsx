@@ -10,7 +10,6 @@ import { Send, Loader2, Gift } from "lucide-react"
 import { useAuth } from "@/contexts/auth-context"
 import { collection, query, where, getDocs, Timestamp, doc, setDoc } from "firebase/firestore"
 import { db } from "@/lib/firebase-config"
-import { generateMessageId } from "@/utils/message-id-generator"
 
 interface SendBirthdayMessageProps {
   contactId: string
@@ -73,14 +72,15 @@ export function SendBirthdayMessage({
     if (!user?.email || !contactId) return false
 
     try {
-      const today = new Date().toISOString().split("T")[0]
-      const messageId = generateMessageId("birthday", user.email, contactId, new Date())
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
 
       const sentMessagesRef = collection(db, "sent_messages")
       const q = query(
         sentMessagesRef,
-        where("messageId", "==", messageId),
-        where("timestamp", ">=", Timestamp.fromDate(new Date(today))),
+        where("userEmail", "==", user.email),
+        where("contactId", "==", contactId),
+        where("timestamp", ">=", Timestamp.fromDate(today)),
         where("status", "in", ["sent", "sending"]),
       )
 
@@ -170,7 +170,7 @@ export function SendBirthdayMessage({
       }
 
       // Record the message as sent
-      // await recordMessageSent(finalMessage)
+      await recordMessageSent(finalMessage)
 
       toast({
         title: "Mensagem enviada!",

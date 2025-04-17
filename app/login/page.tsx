@@ -144,8 +144,7 @@ export default function LoginPage() {
           Nunca + esqueça
           <br />o aniversário de ninguém
         </h1>
-        <p className="text-center text-gray-600 mb-6">Coloque o email e senha
-</p>
+        <p className="text-center text-gray-600 mb-6">Insira seu email e senha</p>
 
         {error && (
           <Alert variant="destructive" className="mb-4">
