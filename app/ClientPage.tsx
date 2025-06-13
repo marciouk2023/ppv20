@@ -234,7 +234,7 @@ export default function ClientPage() {
               Toda história tem um ponto de virada - TALVEZ A SUA COMEÇA AQUI
             </h1>
             <div className="w-24 h-1 bg-onda-yellow mx-auto"></div>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center mt-32 gap-y-3.5 mb-11">
+            <div className="flex sm:flex-row justify-center mt-32 tracking-tight leading-3 leading-4 leading-7 items-end flex-col gap-y-3 mb-11 px-32 py-0">
               <Button
                 asChild
                 className="bg-white text-onda-dark-blue hover:bg-gray-200 transition-colors px-4 sm:px-8 font-semibold shadow-lg text-lg py-7 sm:py-6 rounded-xl w-[90%] sm:w-auto mx-auto sm:mx-0"
