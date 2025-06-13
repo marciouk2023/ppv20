@@ -420,7 +420,7 @@ export default function ClientPage() {
               </div>
 
               {/* Coluna 2: Mapa - Carregado sob demanda */}
-              <div className="w-full rounded-lg shadow-lg overflow-hidden h-[500px]">
+              <div className="w-full rounded-lg shadow-lg overflow-hidden h-[500px] hidden md:block">
                 {imagesInView ? (
                   <iframe
                     src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d300.00000000000006!2d-8.600000000000001!3d41.14961!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0xd2464e000000000%3A0x0!2sIgreja%20Evangelica%20Novo%20Dia%2C%20Rua%20da%20Alegria%2C%20847%2C%204000-314%20Porto%2C%20Portugal!5e0!3m2!1sen!2spt!4v1718246000000!5m2!1sen!2spt"
