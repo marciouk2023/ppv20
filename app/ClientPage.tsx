@@ -230,7 +230,7 @@ export default function ClientPage() {
           ></div>
           <div className="absolute inset-0 bg-black opacity-40" aria-hidden="true"></div>
           <div className="relative z-10 space-y-6">
-            <h1 className="text-white text-4xl md:text-6xl font-lato font-bold uppercase leading-tight tracking-wider max-w-4xl mx-auto text-shadow-lg lg:text-5xl">
+            <h1 className="text-white text-3xl sm:text-4xl md:text-6xl font-lato font-bold uppercase leading-tight tracking-wider max-w-4xl mx-auto text-shadow-lg lg:text-5xl">
               Toda história tem um ponto de virada - TALVEZ A SUA COMEÇA AQUI
             </h1>
             <div className="w-24 h-1 bg-onda-yellow mx-auto"></div>
