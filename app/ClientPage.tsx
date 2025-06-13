@@ -160,10 +160,10 @@ export default function ClientPage() {
             alt="Igreja Evangélica no Porto - Logo Oficial"
             width={180}
             height={60}
-            className="h-auto max-h-[60px] w-auto"
+            className="h-auto max-h-[50px] md:max-h-[60px] w-auto"
             priority // Marca como prioritária para carregamento rápido (LCP)
           />
-          <span className="ml-4 text-black text-lg font-semibold hidden md:block">Igreja Evangélica no Porto</span>
+          <span className="ml-2 md:ml-4 text-black text-sm md:text-lg font-semibold">Igreja Evangélica no Porto</span>
         </div>
 
         {/* Desktop Navigation */}
@@ -188,7 +188,7 @@ export default function ClientPage() {
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" aria-label="Abrir menu">
-                <MenuIcon className="h-6 w-6" />
+                <MenuIcon className="h-8 w-8" />
               </Button>
             </SheetTrigger>
             <SheetContent side="right">
@@ -237,7 +237,7 @@ export default function ClientPage() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center mt-32 gap-y-3.5 mb-11">
               <Button
                 asChild
-                className="bg-white text-onda-dark-blue hover:bg-gray-200 transition-colors px-8 font-semibold shadow-lg text-lg py-6 rounded-xl"
+                className="bg-white text-onda-dark-blue hover:bg-gray-200 transition-colors px-4 sm:px-8 font-semibold shadow-lg text-lg py-7 sm:py-6 rounded-xl w-[90%] sm:w-auto mx-auto sm:mx-0"
               >
                 <a href="#como-chegar" onClick={(e) => handleSmoothScroll(e, "#como-chegar")}>
                   Como chegar até nós
@@ -245,7 +245,7 @@ export default function ClientPage() {
               </Button>
               <Button
                 asChild
-                className="text-white hover:bg-green-600 transition-colors px-8 font-semibold shadow-lg rounded-xl text-lg py-6 bg-green-600"
+                className="text-white hover:bg-green-600 transition-colors px-4 sm:px-8 font-semibold shadow-lg rounded-xl text-lg py-7 sm:py-6 bg-green-600 w-[90%] sm:w-auto mx-auto sm:mx-0"
               >
                 <a
                   href="https://wa.me/447897274321?text=Ola%2C%20gostaria%20de%20mais%20informacoes%20sobre%20a%20igreja%20evangelica%20no%20porto"
