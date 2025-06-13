@@ -47,6 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="dns-prefetch" href="https://firebasestorage.googleapis.com" />
         <meta name="theme-color" content="#3A1F5C" />
         <link rel="icon" href="/favicon.ico" sizes="any" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
       </head>
       <body>{children}</body>
     </html>
