@@ -163,7 +163,7 @@ export default function ClientPage() {
             className="h-auto max-h-[50px] md:max-h-[60px] w-auto"
             priority // Marca como prioritária para carregamento rápido (LCP)
           />
-          <span className="ml-2 md:ml-4 text-black text-sm md:text-lg font-semibold">Igreja Evangélica no Porto</span>
+          <span className="ml-2 md:ml-4 text-black text-sm md:text-lg font-semibold">Igreja Evangélica em Paris</span>
         </div>
 
         {/* Desktop Navigation */}
@@ -248,7 +248,7 @@ export default function ClientPage() {
                 className="text-white hover:bg-green-600 transition-colors px-4 sm:px-8 font-semibold shadow-lg rounded-xl text-lg py-7 sm:py-6 bg-green-600 w-[90%] sm:w-auto mx-auto sm:mx-0"
               >
                 <a
-                  href="https://wa.me/447897274321?text=Ola%2C%20gostaria%20de%20mais%20informacoes%20sobre%20a%20igreja%20evangelica%20no%20porto"
+                  href="https://wa.me/33768954902?text=Ola%2C%20gostaria%20de%20mais%20informacoes%20sobre%20a%20igreja%20evangelica%20em%20paris"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -265,12 +265,12 @@ export default function ClientPage() {
             {/* Coluna Esquerda: Conteúdo de Texto */}
             <div className="text-center md:text-left space-y-6">
               <h2 className="text-black text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight tracking-tighter">
-                <span className="hidden md:inline">IGREJA EVANGÉLICA NO PORTO - </span>UM LUGAR PARA VISITAR E PERTENCER
+                <span className="hidden md:inline">IGREJA EVANGÉLICA EM PARIS - </span>UM LUGAR PARA VISITAR E PERTENCER
               </h2>
               <p className="text-black text-lg md:text-xl font-sans leading-relaxed">
-                Num mundo de pressa e solidão, a Igreja Evangélica no Porto - IND (Igreja Novo Dia) é um convite ao
+                Num mundo de pressa e solidão, a Igreja Evangélica em Paris - IND (Igreja Novo Dia) é um convite ao
                 descanso. Em Jesus encontramos descanso, e em comunidade encontramos abrigo. Aqui, ninguém é estranho —
-                todos são bem-vindos na nossa igreja evangélica no centro do Porto.
+                todos são bem-vindos na nossa igreja evangélica em Montrouge, Paris.
               </p>
             </div>
             {/* Coluna Direita: Espaço para Imagem */}
@@ -315,43 +315,30 @@ export default function ClientPage() {
           <div
             className="absolute inset-0 bg-cover bg-center"
             style={{
-              backgroundImage: `url('https://firebasestorage.googleapis.com/v0/b/mmlj---new-day-church.firebasestorage.app/o/igreja%20evangelica%20porto.jpg?alt=media&token=f805deb7-8fc8-4403-beee-c5f5fc9e7b24')`,
+              backgroundImage: `url('https://media.cntraveller.com/photos/653783ab9da3a22eb97452f9/16:9/w_2240,c_limit/Cheapest_time_to_go_to_Paris_October23_Getty_Images.jpg')`,
             }}
             aria-hidden="true"
           ></div>
           <div className="absolute inset-0 bg-black opacity-60" aria-hidden="true"></div>
           <div className="relative z-10 max-w-6xl mx-auto space-y-12">
             <h2 className="text-white text-4xl md:text-5xl lg:text-6xl font-extrabold uppercase leading-tight tracking-wide text-shadow-lg">
-              HORÁRIOS DE CULTO - IGREJA EVANGÉLICA NO PORTO
+              HORÁRIOS DE CULTO - IGREJA EVANGÉLICA EM PARIS
             </h2>
             <p className="text-white text-lg md:text-xl font-sans leading-relaxed max-w-3xl mx-auto text-shadow-lg">
-              Junte-se a nós em nossos cultos semanais na Igreja Evangélica no Porto.
+              Junte-se a nós em nosso culto semanal na Igreja Evangélica em Paris.
             </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12">
-              {/* Horário de Domingo */}
-              <div className="flex flex-col items-center space-y-4 p-6 bg-white bg-opacity-95 rounded-lg shadow-lg backdrop-blur-sm">
+            <div className="flex justify-center">
+              {/* Horário de Sábado */}
+              <div className="flex flex-col items-center space-y-4 p-6 bg-white bg-opacity-95 rounded-lg shadow-lg backdrop-blur-sm max-w-md">
                 <CalendarDays className="h-12 w-12 text-onda-dark-blue" />
-                <h3 className="text-black text-3xl font-bold uppercase">Domingo</h3>
+                <h3 className="text-black text-3xl font-bold uppercase">Sábado</h3>
                 <div className="flex items-center space-x-2 text-black text-2xl font-semibold">
                   <Clock className="h-6 w-6" />
-                  <span>10:00h</span>
+                  <span>15:00h</span>
                 </div>
-                <p className="text-black text-base font-sans leading-relaxed">
-                  Culto principal da Igreja Evangélica no Porto com louvor, palavra e comunhão.
-                </p>
-              </div>
-
-              {/* Horário de Sexta-feira */}
-              <div className="flex flex-col items-center space-y-4 p-6 bg-white bg-opacity-95 rounded-lg shadow-lg backdrop-blur-sm">
-                <CalendarDays className="h-12 w-12 text-onda-dark-blue" />
-                <h3 className="text-black text-3xl font-bold uppercase">Sexta-feira</h3>
-                <div className="flex items-center space-x-2 text-black text-2xl font-semibold">
-                  <Clock className="h-6 w-6" />
-                  <span>20:30h</span>
-                </div>
-                <p className="text-black text-base font-sans leading-relaxed">
-                  Reunião de oração e estudo da palavra na Igreja Evangélica no Porto.
+                <p className="text-black text-base font-sans leading-relaxed text-center">
+                  Culto principal da Igreja Evangélica em Paris com louvor, palavra e comunhão.
                 </p>
               </div>
             </div>
@@ -366,14 +353,14 @@ export default function ClientPage() {
               <div className="space-y-8">
                 <div className="text-left space-y-6">
                   <h2 className="text-black text-4xl md:text-5xl lg:text-6xl font-extrabold uppercase leading-tight tracking-wide">
-                    COMO CHEGAR À IGREJA EVANGÉLICA NO PORTO?
+                    COMO CHEGAR À IGREJA EVANGÉLICA EM PARIS?
                   </h2>
                   <p className="text-black text-lg md:text-xl lg:text-2xl font-sans leading-relaxed">
-                    No centro da cidade do Porto, está a Igreja Evangélica Novo Dia.
+                    Em Montrouge, Paris, está a Igreja Evangélica Novo Dia.
                     <br />
-                    <strong>Rua da Alegria, 847 - Porto</strong>
+                    <strong>93 Avenue de la République, 92120 Montrouge, Paris</strong>
                     <br />
-                    És nosso(a) convidado(a) para conhecer a IND - Porto
+                    És nosso(a) convidado(a) para conhecer a IND - Paris
                   </p>
                 </div>
 
@@ -381,11 +368,11 @@ export default function ClientPage() {
                 <div className="flex sm:grid sm:grid-cols-2 gap-6 justify-center">
                   {/* Waze Column */}
                   <a
-                    href="https://waze.com/ul?q=Igreja%20Evangelica%20Novo%20Dia%20Rua%20da%20Alegria%2C%20847%20Porto%20Portugal"
+                    href="https://waze.com/ul?q=Igreja%20Evangelica%20Novo%20Dia%2093%20Avenue%20de%20la%20République%2092120%20Montrouge%20Paris"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex flex-col items-center space-y-2 sm:space-y-4 hover:opacity-80 transition-opacity px-4 sm:px-0"
-                    aria-label="Navegar para a Igreja Evangélica no Porto usando o Waze"
+                    aria-label="Navegar para a Igreja Evangélica em Paris usando o Waze"
                   >
                     <img
                       src="https://brandlogos.net/wp-content/uploads/2025/05/waze_app_icon-logo_brandlogos.net_l82da.png"
@@ -400,11 +387,11 @@ export default function ClientPage() {
 
                   {/* Google Maps Column */}
                   <a
-                    href="https://www.google.com/maps/search/?api=1&query=Igreja%20Evangelica%20Novo%20Dia%20Rua%20da%20Alegria%2C%20847%20Porto%20Portugal"
+                    href="https://www.google.com/maps/search/?api=1&query=Igreja%20Evangelica%20Novo%20Dia%2093%20Avenue%20de%20la%20République%2092120%20Montrouge%20Paris"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex flex-col items-center space-y-2 sm:space-y-4 hover:opacity-80 transition-opacity px-4 sm:px-0"
-                    aria-label="Navegar para a Igreja Evangélica no Porto usando o Google Maps"
+                    aria-label="Navegar para a Igreja Evangélica em Paris usando o Google Maps"
                   >
                     <img
                       src="https://images.seeklogo.com/logo-png/26/1/new-google-maps-icon-logo-png_seeklogo-268336.png"
@@ -423,15 +410,15 @@ export default function ClientPage() {
               <div className="w-full rounded-lg shadow-lg overflow-hidden h-[500px] hidden md:block">
                 {imagesInView ? (
                   <iframe
-                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d300.00000000000006!2d-8.600000000000001!3d41.14961!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0xd2464e000000000%3A0x0!2sIgreja%20Evangelica%20Novo%20Dia%2C%20Rua%20da%20Alegria%2C%20847%2C%204000-314%20Porto%2C%20Portugal!5e0!3m2!1sen!2spt!4v1718246000000!5m2!1sen!2spt"
+                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d2625.123456789!2d2.3186!3d48.8175!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2s93%20Avenue%20de%20la%20République%2C%2092120%20Montrouge%2C%20France!5e0!3m2!1sen!2sfr!4v1718246000000!5m2!1sen!2sfr"
                     width="100%"
                     height="100%"
                     style={{ border: 0 }}
                     allowFullScreen={true}
                     loading="lazy"
                     referrerPolicy="no-referrer-when-downgrade"
-                    aria-label="Mapa de localização da Igreja Evangélica no Porto"
-                    title="Mapa da Igreja Evangélica no Porto - Rua da Alegria, 847"
+                    aria-label="Mapa de localização da Igreja Evangélica em Paris"
+                    title="Mapa da Igreja Evangélica em Paris - 93 Avenue de la République, Montrouge"
                   ></iframe>
                 ) : (
                   <div className="w-full h-full bg-gray-200 flex items-center justify-center">
@@ -450,20 +437,20 @@ export default function ClientPage() {
         >
           <div className="max-w-4xl mx-auto space-y-8">
             <h2 className="text-white text-4xl md:text-5xl lg:text-6xl font-extrabold uppercase leading-tight tracking-wide text-shadow-lg">
-              CONTATO - IGREJA EVANGÉLICA NO PORTO
+              CONTATO - IGREJA EVANGÉLICA EM PARIS
             </h2>
             <p className="text-white text-lg md:text-xl font-sans leading-relaxed max-w-3xl mx-auto text-shadow-lg">
-              Tem alguma pergunta ou precisa de ajuda? Entre em contato com a Igreja Evangélica no Porto!
+              Tem alguma pergunta ou precisa de ajuda? Entre em contato com a Igreja Evangélica em Paris!
             </p>
             <Button
               asChild
               className="inline-flex items-center justify-center border border-transparent rounded-md text-white bg-green-500 hover:bg-green-600 transition-colors shadow-lg tracking-normal leading-7 font-medium py-8 px-14 text-xl"
             >
               <a
-                href="https://wa.me/447897274321?text=Ola%2C%20gostaria%20de%20saber%20mais%20sobre%20a%20Igreja%20Evangelica%20no%20Porto."
+                href="https://wa.me/33768954902?text=Ola%2C%20gostaria%20de%20saber%20mais%20sobre%20a%20Igreja%20Evangelica%20em%20Paris."
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-label="Contatar a Igreja Evangélica no Porto via WhatsApp"
+                aria-label="Contatar a Igreja Evangélica em Paris via WhatsApp"
               >
                 <Whatsapp className="h-6 w-6 mr-3" />
                 FALE CONOSCO
@@ -486,7 +473,7 @@ export default function ClientPage() {
               loading="lazy"
             />
             <p className="mt-4 text-white text-lg font-semibold text-center md:text-left">
-              Igreja Evangélica no Porto Igreja Novo Dia
+              Igreja Evangélica em Paris Igreja Novo Dia
             </p>
           </div>
 
@@ -540,21 +527,23 @@ export default function ClientPage() {
             <h3 className="text-white text-lg font-semibold mb-2">Endereço e Contato</h3>
             {/* Mobile-only address with icons */}
             <div className="flex items-center justify-center md:justify-start space-x-2 mb-2 md:hidden">
-              <p className="text-white text-base">Igreja Novo Dia - Porto - Rua da Alegria, 847 - 4000-314 - Porto</p>
+              <p className="text-white text-base">
+                Igreja Novo Dia - Paris - 93 Avenue de la République, 92120 Montrouge, Paris
+              </p>
               <a
-                href="https://waze.com/ul?q=Igreja%20Evangelica%20Novo%20Dia%20Rua%20da%20Alegria%2C%20847%20-%204000-314%20Porto"
+                href="https://waze.com/ul?q=Igreja%20Evangelica%20Novo%20Dia%2093%20Avenue%20de%20la%20République%2092120%20Montrouge%20Paris"
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-label="Navegar para a Igreja Evangélica no Porto usando o Waze"
+                aria-label="Navegar para a Igreja Evangélica em Paris usando o Waze"
                 className="text-white hover:text-gray-400 transition-colors"
               >
                 <Navigation className="h-5 w-5" />
               </a>
               <a
-                href="https://www.google.com/maps/search/?api=1&query=Igreja%20Evangelica%20Novo%20Dia%20Rua%20da%20Alegria%2C%20847%20-%204000-314%20Porto"
+                href="https://www.google.com/maps/search/?api=1&query=Igreja%20Evangelica%20Novo%20Dia%2093%20Avenue%20de%20la%20République%2092120%20Montrouge%20Paris"
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-label="Navegar para a Igreja Evangélica no Porto usando o Google Maps"
+                aria-label="Navegar para a Igreja Evangélica em Paris usando o Google Maps"
                 className="text-white hover:text-gray-400 transition-colors"
               >
                 <Map className="h-5 w-5" />
@@ -562,16 +551,16 @@ export default function ClientPage() {
             </div>
             {/* Desktop address (original) */}
             <p className="text-white text-sm mb-2 hidden md:block text-center md:text-left">
-              Igreja Novo Dia - Rua da Alegria, 847 - 4000-314 - Porto
+              Igreja Novo Dia - 93 Avenue de la République, 92120 Montrouge, Paris
             </p>
 
             {/* WhatsApp button */}
             <a
-              href="https://wa.me/447897274321?text=Ola%2C%20gostaria%20de%20saber%20mais%20sobre%20a%20Igreja%20Evangelica%20no%20Porto."
+              href="https://wa.me/33768954902?text=Ola%2C%20gostaria%20de%20saber%20mais%20sobre%20a%20Igreja%20Evangelica%20em%20Paris."
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center justify-center px-4 py-2 border border-transparent text-base font-medium rounded-md text-white bg-green-500 hover:bg-green-600 transition-colors mt-4"
-              aria-label="Contatar a Igreja Evangélica no Porto via WhatsApp"
+              aria-label="Contatar a Igreja Evangélica em Paris via WhatsApp"
             >
               <Whatsapp className="h-5 w-5 mr-2" />
               Entre em contato
@@ -596,27 +585,28 @@ export default function ClientPage() {
           __html: JSON.stringify({
             "@context": "https://schema.org",
             "@type": "Church",
-            name: "Igreja Evangélica Novo Dia Porto",
-            alternateName: "Igreja Evangélica no Porto",
-            url: "https://www.igrejanovodia.pt",
-            logo: "https://www.igrejanovodia.pt/images/igreja_evangelica_no_porto.jpg",
+            name: "Igreja Evangélica Novo Dia Paris",
+            alternateName: "Igreja Evangélica em Paris",
+            url: "https://www.igrejanovodia.fr",
+            logo: "https://www.igrejanovodia.fr/images/igreja_evangelica_em_paris.jpg",
             description:
-              "Igreja Evangélica no Porto - IND (Igreja Novo Dia) é uma comunidade cristã acolhedora no centro do Porto.",
+              "Igreja Evangélica em Paris - IND (Igreja Novo Dia) é uma comunidade cristã acolhedora em Montrouge, Paris.",
             address: {
               "@type": "PostalAddress",
-              streetAddress: "Rua da Alegria, 847",
-              addressLocality: "Porto",
-              postalCode: "4000-314",
-              addressCountry: "PT",
+              streetAddress: "93 Avenue de la République",
+              addressLocality: "Montrouge",
+              postalCode: "92120",
+              addressRegion: "Paris",
+              addressCountry: "FR",
             },
             geo: {
               "@type": "GeoCoordinates",
-              latitude: "41.14961",
-              longitude: "-8.60000",
+              latitude: "48.8175",
+              longitude: "2.3186",
             },
-            telephone: "+447897274321",
-            openingHours: ["Su 10:00-12:00", "Fr 20:30-22:00"],
-            sameAs: ["https://www.instagram.com/novodiapt/"],
+            telephone: "+33768954902",
+            openingHours: ["Sa 15:00-17:00"],
+            sameAs: ["https://www.instagram.com/novodiaparis/"],
           }),
         }}
       />
