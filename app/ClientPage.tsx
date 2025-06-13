@@ -265,7 +265,7 @@ export default function ClientPage() {
             {/* Coluna Esquerda: Conteúdo de Texto */}
             <div className="text-center md:text-left space-y-6">
               <h2 className="text-black text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight tracking-tighter">
-                IGREJA EVANGÉLICA NO PORTO - UM LUGAR PARA VISITAR E PERTENCER
+                <span className="hidden md:inline">IGREJA EVANGÉLICA NO PORTO - </span>UM LUGAR PARA VISITAR E PERTENCER
               </h2>
               <p className="text-black text-lg md:text-xl font-sans leading-relaxed">
                 Num mundo de pressa e solidão, a Igreja Evangélica no Porto - IND (Igreja Novo Dia) é um convite ao
