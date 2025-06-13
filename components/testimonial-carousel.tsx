@@ -18,7 +18,46 @@ interface TestimonialCarouselProps {
   testimonials: Testimonial[]
 }
 
-export default function TestimonialCarousel({ testimonials }: TestimonialCarouselProps) {
+const testimonials = [
+  {
+    image:
+      "https://firebasestorage.googleapis.com/v0/b/mmlj---new-day-church.firebasestorage.app/o/igreja%20evangelica%20porto%20cidade.webp?alt=media&token=65a222e1-1078-49b2-90d8-b4a203e044c2",
+    name: "Voltei a sonhar",
+    jobTitle: "Fatima Santos",
+    text: "Nesta comunidade da Igreja Evangélica em Paris, encontrei na Igreja Novo Dia a força e a inspiração para reacender meus sonhos e seguir em frente com fé e propósito.",
+    title: "Uma Experiência Transformadora",
+    rating: 5,
+  },
+  {
+    image:
+      "https://firebasestorage.googleapis.com/v0/b/mmlj---new-day-church.firebasestorage.app/o/igreja%20porto%20evangelica.webp?alt=media&token=32d480dc-8a7d-4ccd-a899-89ec755c7a76",
+    name: "Uma igreja biblica",
+    jobTitle: "Arlan Lima",
+    text: "É um privilégio fazer parte da Igreja Evangélica em Paris Novo Dia que se baseia firmemente na Palavra de Deus, trazendo clareza e direção para a vida.",
+    title: "Paz e Conexão Profunda",
+    rating: 5,
+  },
+  {
+    image:
+      "https://firebasestorage.googleapis.com/v0/b/mmlj---new-day-church.firebasestorage.app/o/igreja%20evangelica%20porto%20cidade%20portugal.webp?alt=media&token=64819e26-60c7-4fdb-8daf-69e8bb8f3426",
+    name: "Um lugar para meus filhos",
+    jobTitle: "Jaize Buliê",
+    text: "Finalmente, um ambiente seguro e acolhedor na Igreja Novo Dia onde meus filhos podem crescer na fé e desenvolver valores cristãos sólidos.",
+    title: "Comunidade Acolhedora",
+    rating: 5,
+  },
+  {
+    image:
+      "https://firebasestorage.googleapis.com/v0/b/mmlj---new-day-church.firebasestorage.app/o/igreja%20evangelica%20na%20cidade%20do%20porto.webp?alt=media&token=cba8dc79-b7da-40e2-9d38-8b608de87c7e",
+    name: "Adoração Cristocêntrica",
+    jobTitle: "Cauan Brito",
+    text: "A adoração é verdadeiramente centrada em Cristo, porque entendemos que na verdade tudo é sobre ELE",
+    title: "Cultos Inspiradores",
+    rating: 5,
+  },
+]
+
+export default function TestimonialCarousel({ testimonials: propTestimonials }: TestimonialCarouselProps) {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [isMobile, setIsMobile] = useState(false)
   const touchStartX = useRef(0)

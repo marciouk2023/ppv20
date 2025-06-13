@@ -2,9 +2,9 @@ import type { Metadata } from "next"
 import ClientPage from "./ClientPage"
 
 export const metadata: Metadata = {
-  title: "Igreja Evangélica no Porto | IND - Igreja Evangélica Novo Dia Porto",
+  title: "Igreja Evangélica em Paris | IND - Igreja Evangélica Novo Dia Paris",
   description:
-    "Igreja Evangélica no Porto? Conheça a IND - Igreja Evangélica Novo Dia - Porto. Situada no centro da cidade do Porto.",
+    "Igreja Evangélica em Paris? Conheça a IND - Igreja Evangélica Novo Dia - Paris. Situada em Montrouge, Paris.",
 }
 
 export default function Component() {
