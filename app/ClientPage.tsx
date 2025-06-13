@@ -485,7 +485,8 @@ export default function ClientPage() {
               className="h-auto max-h-[60px] w-auto"
               loading="lazy"
             />
-            <p className="mt-4 text-white text-lg font-semibold text-center md:text-left">Igreja Evangélica no Porto</p>
+            <p className="mt-4 text-white text-lg font-semibold text-center md:text-left">Igreja Evangélica no Porto
+Igreja Novo Dia</p>
           </div>
 
           {/* Navigation Links */}
@@ -519,7 +520,7 @@ export default function ClientPage() {
           {/* Social Media */}
           <div className="text-center md:text-left">
             <h3 className="text-white text-lg font-semibold mb-2">
-              Siga a Igreja Evangélica no Porto nas redes sociais
+              Siga a IND no Porto nas redes sociais
             </h3>
             <div className="flex justify-center md:justify-start space-x-6">
               {socialLinks.map((link) => (
@@ -541,7 +542,7 @@ export default function ClientPage() {
             {/* Mobile-only address with icons */}
             <div className="flex items-center justify-center md:justify-start space-x-2 mb-2 md:hidden">
               <p className="text-white text-base">
-                Igreja Evangélica no Porto - Rua da Alegria, 847 - 4000-314 - Porto
+                Igreja Novo Dia - Porto - Rua da Alegria, 847 - 4000-314 - Porto
               </p>
               <a
                 href="https://waze.com/ul?q=Igreja%20Evangelica%20Novo%20Dia%20Rua%20da%20Alegria%2C%20847%20-%204000-314%20Porto"
