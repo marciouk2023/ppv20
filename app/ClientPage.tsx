@@ -378,19 +378,19 @@ export default function ClientPage() {
                 </div>
 
                 {/* Two Columns: Waze and Google Maps */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="flex sm:grid sm:grid-cols-2 gap-6 justify-center">
                   {/* Waze Column */}
                   <a
                     href="https://waze.com/ul?q=Igreja%20Evangelica%20Novo%20Dia%20Rua%20da%20Alegria%2C%20847%20Porto%20Portugal"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex flex-col items-center space-y-4 hover:opacity-80 transition-opacity"
+                    className="flex flex-col items-center space-y-2 sm:space-y-4 hover:opacity-80 transition-opacity px-4 sm:px-0"
                     aria-label="Navegar para a Igreja Evangélica no Porto usando o Waze"
                   >
                     <img
                       src="https://brandlogos.net/wp-content/uploads/2025/05/waze_app_icon-logo_brandlogos.net_l82da.png"
                       alt="Waze - Navegação para a Igreja Evangélica no Porto"
-                      className="w-16 h-16 object-contain"
+                      className="w-12 h-12 sm:w-16 sm:h-16 object-contain"
                       width="64"
                       height="64"
                       loading="lazy"
@@ -403,13 +403,13 @@ export default function ClientPage() {
                     href="https://www.google.com/maps/search/?api=1&query=Igreja%20Evangelica%20Novo%20Dia%20Rua%20da%20Alegria%2C%20847%20Porto%20Portugal"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex flex-col items-center space-y-4 hover:opacity-80 transition-opacity"
+                    className="flex flex-col items-center space-y-2 sm:space-y-4 hover:opacity-80 transition-opacity px-4 sm:px-0"
                     aria-label="Navegar para a Igreja Evangélica no Porto usando o Google Maps"
                   >
                     <img
                       src="https://images.seeklogo.com/logo-png/26/1/new-google-maps-icon-logo-png_seeklogo-268336.png"
                       alt="Google Maps - Localização da Igreja Evangélica no Porto"
-                      className="w-16 h-16 object-contain"
+                      className="w-12 h-12 sm:w-16 sm:h-16 object-contain"
                       width="64"
                       height="64"
                       loading="lazy"
@@ -485,8 +485,9 @@ export default function ClientPage() {
               className="h-auto max-h-[60px] w-auto"
               loading="lazy"
             />
-            <p className="mt-4 text-white text-lg font-semibold text-center md:text-left">Igreja Evangélica no Porto
-Igreja Novo Dia</p>
+            <p className="mt-4 text-white text-lg font-semibold text-center md:text-left">
+              Igreja Evangélica no Porto Igreja Novo Dia
+            </p>
           </div>
 
           {/* Navigation Links */}
@@ -519,9 +520,7 @@ Igreja Novo Dia</p>
 
           {/* Social Media */}
           <div className="text-center md:text-left">
-            <h3 className="text-white text-lg font-semibold mb-2">
-              Siga a IND no Porto nas redes sociais
-            </h3>
+            <h3 className="text-white text-lg font-semibold mb-2">Siga a IND no Porto nas redes sociais</h3>
             <div className="flex justify-center md:justify-start space-x-6">
               {socialLinks.map((link) => (
                 <a
@@ -541,9 +540,7 @@ Igreja Novo Dia</p>
             <h3 className="text-white text-lg font-semibold mb-2">Endereço e Contato</h3>
             {/* Mobile-only address with icons */}
             <div className="flex items-center justify-center md:justify-start space-x-2 mb-2 md:hidden">
-              <p className="text-white text-base">
-                Igreja Novo Dia - Porto - Rua da Alegria, 847 - 4000-314 - Porto
-              </p>
+              <p className="text-white text-base">Igreja Novo Dia - Porto - Rua da Alegria, 847 - 4000-314 - Porto</p>
               <a
                 href="https://waze.com/ul?q=Igreja%20Evangelica%20Novo%20Dia%20Rua%20da%20Alegria%2C%20847%20-%204000-314%20Porto"
                 target="_blank"
