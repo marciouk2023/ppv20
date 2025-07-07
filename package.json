@@ -7,6 +7,7 @@
     "@radix-ui/react-select": "latest",
     "@radix-ui/react-slot": "latest",
     "@radix-ui/react-switch": "latest",
+    "@radix-ui/react-tabs": "latest",
     "@radix-ui/react-toast": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",

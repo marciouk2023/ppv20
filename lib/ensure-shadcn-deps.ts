@@ -14,3 +14,4 @@ import "next-themes"
 import "@radix-ui/react-checkbox"
 import "@radix-ui/react-radio-group"
 import "@radix-ui/react-select"
+import "@radix-ui/react-tabs" // Added this import

@@ -6,7 +6,7 @@ import { Urbanist } from "next/font/google"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
 import { AuthProvider } from "@/contexts/auth-context"
-import "@/lib/ensure-shadcn-deps" // <-- This is the crucial import for resolving module errors
+import "@/lib/ensure-shadcn-deps" // This import ensures peer-deps are resolved
 
 // Configurar Urbanist como a única fonte
 const urbanist = Urbanist({
