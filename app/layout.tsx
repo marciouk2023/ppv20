@@ -1,90 +1,43 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { inter, robotoMono, lato } from "@/styles/fonts"
+import { Urbanist } from "next/font/google"
 import "./globals.css"
+import { ThemeProvider } from "@/components/theme-provider"
+import { Toaster } from "@/components/ui/toaster"
+import { AuthProvider } from "@/contexts/auth-context"
 
+// Configurar Urbanist como a única fonte
+const urbanist = Urbanist({
+  subsets: ["latin"],
+  variable: "--font-urbanist",
+  display: "swap",
+  weight: ["400", "500", "600", "700", "800"],
+})
+
+// Update the metadata to include the new title and favicon
 export const metadata: Metadata = {
-  title: "Igreja Evangélica no Porto | IND - Igreja Evangélica Novo Dia Porto",
-  description:
-    "Igreja Evangélica no Porto? Conheça a IND - Igreja Evangélica Novo Dia - Porto. Situada no centro da cidade do Porto.",
-  keywords:
-    "igreja evangélica, igreja evangélica no porto, igreja novo dia, culto evangélico porto, igreja cristã porto",
-  openGraph: {
-    title: "Igreja Evangélica no Porto | IND - Igreja Evangélica Novo Dia Porto",
-    description:
-      "Conheça a Igreja Evangélica Novo Dia no centro do Porto. Cultos aos domingos às 10h e sextas às 20:30h.",
-    url: "https://www.igrejanovodia.pt",
-    siteName: "Igreja Evangélica Novo Dia Porto",
-    images: [
-      {
-        url: "https://www.igrejanovodia.pt/images/igreja_evangelica_no_porto.jpg",
-        width: 1200,
-        height: 630,
-        alt: "Igreja Evangélica no Porto - Novo Dia",
-      },
-    ],
-    locale: "pt_PT",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Igreja Evangélica no Porto | IND - Igreja Evangélica Novo Dia Porto",
-    description:
-      "Conheça a Igreja Evangélica Novo Dia no centro do Porto. Cultos aos domingos às 10h e sextas às 20:30h.",
-    images: ["https://www.igrejanovodia.pt/images/igreja_evangelica_no_porto.jpg"],
-  },
-  alternates: {
-    canonical: "https://www.igrejanovodia.pt",
+  title: "Parabéns pra você",
+  description: "Connect and send WhatsApp messages",
+  icons: {
+    icon: "/favicon.svg",
   },
     generator: 'v0.dev'
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode
+}>) {
   return (
-    <html lang="pt-PT" className={`${inter.variable} ${robotoMono.variable} ${lato.variable}`}>
-      <head>
-        {/* Google Tag Manager */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-            new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-            j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-            'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-            })(window,document,'script','dataLayer','GTM-MLSJGKNW');`,
-          }}
-        />
-        {/* End Google Tag Manager */}
-
-        {/* Google tag (gtag.js) */}
-        <script async src="https://www.googletagmanager.com/gtag/js?id=AW-17185805857"></script>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              window.dataLayer = window.dataLayer || [];
-              function gtag(){dataLayer.push(arguments);}
-              gtag('js', new Date());
-              gtag('config', 'AW-17185805857');
-            `,
-          }}
-        />
-        {/* End Google tag (gtag.js) */}
-
-        <link rel="preconnect" href="https://firebasestorage.googleapis.com" />
-        <link rel="dns-prefetch" href="https://firebasestorage.googleapis.com" />
-        <meta name="theme-color" content="#3A1F5C" />
-        <link rel="icon" href="/favicon.ico" sizes="any" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      </head>
-      <body>
-        {/* Google Tag Manager (noscript) */}
-        <noscript
-          dangerouslySetInnerHTML={{
-            __html: `<iframe src="https://www.googletagmanager.com/ns.html?id=GTM-MLSJGKNW"
-            height="0" width="0" style="display:none;visibility:hidden"></iframe>`,
-          }}
-        />
-        {/* End Google Tag Manager (noscript) */}
-        {children}
+    <html lang="en">
+      <body className={urbanist.className}>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
+          <AuthProvider>
+            {children}
+            <Toaster />
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   )
