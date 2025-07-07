@@ -1,6 +1,7 @@
 import type React from "react"
 import type { Metadata } from "next"
 import ClientLayout from "./ClientLayout"
+import "./globals.css" // globals.css should still be imported here
 
 /* ────────────────────────────────  Metadata  ──────────────────────────────── */
 export const metadata: Metadata = {
@@ -15,6 +16,3 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return <ClientLayout>{children}</ClientLayout>
 }
-
-
-import './globals.css'

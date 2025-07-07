@@ -1,7 +1,7 @@
 /**
  * Dummy module whose sole purpose is to make sure shadcn/ui’s peer
  * dependencies are present during the build. Importing this file in
- * `app/layout.tsx` guarantees the resolver can locate these modules.
+ * `app/ClientLayout.tsx` guarantees the resolver can locate these modules.
  *
  * The imports are side-effect only; everything is tree-shaken away
  * if the corresponding components are not used.
