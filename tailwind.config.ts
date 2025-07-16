@@ -19,10 +19,6 @@ const config = {
       },
     },
     extend: {
-      fontFamily: {
-        urbanist: ["var(--font-urbanist)"],
-        sans: ["var(--font-urbanist)"],
-      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -57,6 +53,11 @@ const config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Custom colors from screenshot
+        "onda-purple": "#3A1F5C",
+        "onda-yellow": "#FFD700",
+        "onda-light-gray": "#EAEAEA",
+        "onda-dark-blue": "#333f57",
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -72,10 +73,26 @@ const config = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        "carousel-scroll": {
+          "0%": { transform: "translateX(0%)" },
+          "100%": { transform: "translateX(calc(var(--carousel-width) * -1))" },
+        },
+        "testimonial-scroll": {
+          "0%": { transform: "translateX(0%)" },
+          "100%": { transform: "translateX(calc(var(--testimonial-carousel-width) * -1))" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "carousel-scroll": "carousel-scroll linear infinite",
+        "testimonial-scroll": "testimonial-scroll linear infinite",
+      },
+      fontFamily: {
+        sans: ["var(--font-inter)"],
+        mono: ["var(--font-roboto-mono)"],
+        lato: ["var(--font-lato)"], // Adicionando a fonte Lato
+        custom: ["var(--font-my-local-font)"],
       },
     },
   },
