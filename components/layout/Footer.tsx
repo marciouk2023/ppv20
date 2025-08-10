@@ -98,32 +98,37 @@ export default function Footer () {
                 <div className="text-center md:text-left">
                     <h3 className="text-white text-lg font-semibold mb-2">Endereço e Contato</h3>
                     {/* Mobile-only address with icons */}
-                    <div className="flex items-center justify-center md:justify-start space-x-2 mb-2 md:hidden">
-                        <p className="text-white text-base">Igreja Novo Dia - Porto</p>
-                        <p className="text-white text-base">Rua da Alegria, 847</p>
-                        <p className="text-white text-base">4000-314 - Porto</p>
-                        <a
-                            href="https://waze.com/ul?q=Igreja%20Evangelica%20Novo%20Dia%20Rua%20da%20Alegria%2C%20847%20-%204000-314%20Porto"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            aria-label="Navegar para a Igreja Evangélica no Porto usando o Waze"
-                            className="text-white hover:text-gray-400 transition-colors"
-                        >
-                            <Navigation className="h-5 w-5"/>
-                        </a>
-                        <a
-                            href="https://www.google.com/maps/search/?api=1&query=Igreja%20Evangelica%20Novo%20Dia%20Rua%20da%20Alegria%2C%20847%20-%204000-314%20Porto"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            aria-label="Navegar para a Igreja Evangélica no Porto usando o Google Maps"
-                            className="text-white hover:text-gray-400 transition-colors"
-                        >
-                            <Map className="h-5 w-5"/>
-                        </a>
+                    <div className="md:hidden mb-2">
+                        <div className="flex flex-col items-center justify-center md:justify-start space-y-1">
+                            <p className="text-white text-base">Igreja Novo Dia - Porto</p>
+                            <p className="text-white text-base">Rua da Alegria, 847</p>
+                            <p className="text-white text-base">4000-314 - Porto</p>
+                        </div>
+                        <div className="flex items-center justify-center md:justify-start space-x-2 mt-2">
+                            <a
+                                href="https://waze.com/ul?q=Igreja%20Evangelica%20Novo%20Dia%20Rua%20da%20Alegria%2C%20847%20-%204000-314%20Porto"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label="Navegar para a Igreja Evangélica no Porto usando o Waze"
+                                className="text-white hover:text-gray-400 transition-colors"
+                            >
+                                <Navigation className="h-5 w-5"/>
+                            </a>
+                            <a
+                                href="https://www.google.com/maps/search/?api=1&query=Igreja%20Evangelica%20Novo%20Dia%20Rua%20da%20Alegria%2C%20847%20-%204000-314%20Porto"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label="Navegar para a Igreja Evangélica no Porto usando o Google Maps"
+                                className="text-white hover:text-gray-400 transition-colors"
+                            >
+                                <Map className="h-5 w-5"/>
+                            </a>
+                        </div>
                     </div>
                     {/* Desktop address (original) */}
                     <p className="text-white text-sm mb-2 hidden md:block text-center md:text-left">Igreja Novo Dia</p>
-                    <p className="text-white text-sm mb-2 hidden md:block text-center md:text-left">Rua da Alegria, 847</p>
+                    <p className="text-white text-sm mb-2 hidden md:block text-center md:text-left">Rua da Alegria,
+                        847</p>
                     <p className="text-white text-sm mb-2 hidden md:block text-center md:text-left">4000-314 - Porto</p>
 
                     {/* WhatsApp button */}
