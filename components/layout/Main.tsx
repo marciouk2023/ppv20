@@ -6,6 +6,7 @@ import TestimonialCarousel from "@/components/testimonial-carousel";
 import {CalendarDays, Clock, PhoneIcon as Whatsapp} from "lucide-react";
 import {handleSmoothScroll} from "@/utils/handleSmoothScroll";
 import LoadingPlaceholder from "@/components/LoadingPlaceholder";
+import {montserrat, poppins} from "@/styles/fonts";
 
 export default function Main() {
 
@@ -112,62 +113,15 @@ export default function Main() {
 
     return (
         <main className="flex-1">
-            {/* Hero Section - Otimizado para LCP */}
-            <section
-                id="home"
-                className="relative flex flex-col items-center justify-center h-[60vh] md:h-[70vh] lg:h-[80vh] text-center px-4 py-16"
-            >
-                {/* Usando div com background-image em vez de style inline para melhor performance */}
-                <div
-                    className="absolute inset-0 bg-cover bg-center"
-                    style={{
-                        backgroundImage: `url('https://firebasestorage.googleapis.com/v0/b/mmlj---new-day-church.firebasestorage.app/o/igreja%20evangelica.webp?alt=media&token=affb563c-cc5b-448d-bf7d-28cd817bcaf4')`,
-                    }}
-                    aria-hidden="true"
-                ></div>
-                <div className="absolute inset-0 bg-black opacity-40" aria-hidden="true"></div>
-                <div className="relative z-10 space-y-6">
-                    <h1 className="text-white text-3xl sm:text-4xl md:text-6xl font-lato font-bold uppercase leading-tight tracking-wider max-w-4xl mx-auto text-shadow-lg lg:text-5xl">
-                        Toda história tem um ponto de virada - TALVEZ A SUA COMEÇA AQUI
-                    </h1>
-                    <div className="w-24 h-1 bg-onda-yellow mx-auto"></div>
-                    <div
-                        className="flex sm:flex-row justify-center mt-32 tracking-tight leading-3 leading-4 leading-7 items-end flex-col gap-y-3 mb-11 px-32 py-0">
-                        <Button
-                            asChild
-                            className="bg-white text-onda-dark-blue hover:bg-gray-200 transition-colors px-4 sm:px-8 font-semibold shadow-lg text-lg py-7 sm:py-6 rounded-xl w-[90%] sm:w-auto mx-auto sm:mx-0"
-                        >
-                            <a href="#como-chegar" onClick={(e) => handleSmoothScroll(e, "#como-chegar")}>
-                                Como chegar até nós
-                            </a>
-                        </Button>
-                        <Button
-                            asChild
-                            className="text-white hover:bg-green-600 transition-colors px-4 sm:px-8 font-semibold shadow-lg rounded-xl text-lg py-7 sm:py-6 bg-green-600 w-[90%] sm:w-auto mx-auto sm:mx-0"
-                        >
-                            <a
-                                href="https://wa.me/447897274321?text=Ola%2C%20gostaria%20de%20mais%20informacoes%20sobre%20a%20igreja%20evangelica%20no%20porto"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                            >
-                                Entre em contato
-                            </a>
-                        </Button>
-                    </div>
-                </div>
-            </section>
-
-            {/* Um lugar para parar... e pertencer Section */}
             <section id="faca-parte" className="bg-onda-light-gray py-8 md:py-12 lg:py-16 px-4 text-center">
                 <div
                     className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-center md:gap-y-5 md:gap-x-72">
-                    {/* Coluna Esquerda: Conteúdo de Texto */}
                     <div className="text-center md:text-left space-y-6">
-                        <h2 className="text-black text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight tracking-tighter">
+                        <h2 className={`${montserrat.variable} font-montserrat text-black text-4xl md:text-5xl lg:text-6xl font-extrabold leading-tight tracking-tighter`}>
                             <span className="hidden md:inline">IGREJA EVANGÉLICA NO PORTO - </span>UM LUGAR PARA VISITAR
                             E PERTENCER
                         </h2>
-                        <p className="text-black text-lg md:text-xl font-sans leading-relaxed">
+                        <p className={`${poppins.variable} font-poppins text-black text-lg md:text-xl font-sans leading-relaxed`}>
                             Num mundo de pressa e solidão, a Igreja Evangélica no Porto - IND (Igreja Novo Dia) é um
                             convite ao
                             descanso. Em Jesus encontramos descanso, e em comunidade encontramos abrigo. Aqui, ninguém é
@@ -175,7 +129,6 @@ export default function Main() {
                             todos são bem-vindos na nossa igreja evangélica no centro do Porto.
                         </p>
                     </div>
-                    {/* Coluna Direita: Espaço para Imagem */}
                     <div className="flex justify-center md:justify-end">
                         <Suspense fallback={<LoadingPlaceholder/>}>
                             <Image
@@ -191,7 +144,6 @@ export default function Main() {
                 </div>
             </section>
 
-            {/* Image Carousel Section - Carregado sob demanda */}
             {imagesInView && (
                 <section aria-labelledby="carousel-heading">
                     <h2 id="carousel-heading" className="sr-only">
@@ -201,7 +153,6 @@ export default function Main() {
                 </section>
             )}
 
-            {/* Testimonial Section - Carregado sob demanda */}
             {imagesInView && (
                 <section aria-labelledby="testimonial-heading">
                     <h2 id="testimonial-heading" className="sr-only">
@@ -211,9 +162,7 @@ export default function Main() {
                 </section>
             )}
 
-            {/* New Section: Horários */}
             <section id="horarios" className="relative py-16 md:py-24 lg:py-32 px-4 text-center bg-cover bg-center">
-                {/* Usando div com background-image em vez de style inline para melhor performance */}
                 <div
                     className="absolute inset-0 bg-cover bg-center"
                     style={{
@@ -231,7 +180,6 @@ export default function Main() {
                     </p>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12">
-                        {/* Horário de Domingo */}
                         <div
                             className="flex flex-col items-center space-y-4 p-6 bg-white bg-opacity-95 rounded-lg shadow-lg backdrop-blur-sm">
                             <CalendarDays className="h-12 w-12 text-onda-dark-blue"/>
@@ -245,7 +193,6 @@ export default function Main() {
                             </p>
                         </div>
 
-                        {/* Horário de Sexta-feira */}
                         <div
                             className="flex flex-col items-center space-y-4 p-6 bg-white bg-opacity-95 rounded-lg shadow-lg backdrop-blur-sm">
                             <CalendarDays className="h-12 w-12 text-onda-dark-blue"/>
@@ -262,11 +209,9 @@ export default function Main() {
                 </div>
             </section>
 
-            {/* New Section: Gathering Information */}
-            <section id="como-chegar" className="bg-white py-16 md:py-24 lg:py-32 px-4">
+            <section id="como-chegar" className="bg-white py-16 md:py-24 lg:py-32 px-4 hidden md:block">
                 <div className="max-w-6xl mx-auto">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12 items-center">
-                        {/* Coluna 1: Texto e botões */}
                         <div className="space-y-8">
                             <div className="text-left space-y-6">
                                 <h2 className="text-black text-4xl md:text-5xl lg:text-6xl font-extrabold uppercase leading-tight tracking-wide">
@@ -281,9 +226,7 @@ export default function Main() {
                                 </p>
                             </div>
 
-                            {/* Two Columns: Waze and Google Maps */}
                             <div className="flex sm:grid sm:grid-cols-2 gap-6 justify-center">
-                                {/* Waze Column */}
                                 <a
                                     href="https://waze.com/ul?q=Igreja%20Evangelica%20Novo%20Dia%20Rua%20da%20Alegria%2C%20847%20Porto%20Portugal"
                                     target="_blank"
@@ -302,7 +245,6 @@ export default function Main() {
                                     <span className="text-black text-sm font-medium text-center">Abrir no Waze</span>
                                 </a>
 
-                                {/* Google Maps Column */}
                                 <a
                                     href="https://www.google.com/maps/search/?api=1&query=Igreja%20Evangelica%20Novo%20Dia%20Rua%20da%20Alegria%2C%20847%20Porto%20Portugal"
                                     target="_blank"
@@ -324,7 +266,6 @@ export default function Main() {
                             </div>
                         </div>
 
-                        {/* Coluna 2: Mapa - Carregado sob demanda */}
                         <div className="w-full rounded-lg shadow-lg overflow-hidden h-[500px] hidden md:block">
                             {imagesInView ? (
                                 <iframe
@@ -348,7 +289,6 @@ export default function Main() {
                 </div>
             </section>
 
-            {/* New Section: CTA Fale Conosco */}
             <section
                 id="contatos"
                 className="bg-onda-dark-blue py-16 md:py-24 lg:py-32 px-4 text-center flex flex-col items-center justify-center"

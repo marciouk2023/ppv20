@@ -6,6 +6,7 @@ import { inter, robotoMono, lato } from "@/styles/fonts"
 import Footer from "@/components/layout/Footer";
 import Header from "@/components/layout/Header";
 import Main from "@/components/layout/Main";
+import WhatsAppButton from "@/components/ui/WhatsAppButton";
 
 export default function ClientPage() {
   return (
@@ -18,6 +19,8 @@ export default function ClientPage() {
 
       {/* Footer */}
       <Footer/>
+
+      <WhatsAppButton/>
       {/* Schema.org markup para Igreja */}
       <script
         type="application/ld+json"
